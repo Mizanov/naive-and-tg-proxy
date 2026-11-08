@@ -39,10 +39,10 @@ prompt_var() {
     eval "$var_name=\"$val\""
 }
 
-prompt_var EUROPE_DOMAIN "Домен европейского сервера с NaiveProxy (например, vpn.mydomain.com)"
+prompt_var EUROPE_DOMAIN "Домен удалённого сервера с NaiveProxy (например, edge.mydomain.com)"
 prompt_var NAIVE_USER "Имя пользователя NaiveProxy (из Telegram-бота)"
 prompt_var NAIVE_PASS "Пароль NaiveProxy (из Telegram-бота)"
-prompt_var LISTEN_PORT "Порт для подключения клиентов к шлюзу в РФ (Mixed HTTP/SOCKS5)" "10808"
+prompt_var LISTEN_PORT "Порт для подключения клиентов к локальному шлюзу (Mixed HTTP/SOCKS5)" "10808"
 
 echo -e "\n${INFO} Установка зависимостей (curl, jq)..."
 export DEBIAN_FRONTEND=noninteractive
@@ -260,6 +260,6 @@ echo "  • Сервер: ${RU_SERVER_IP}"
 echo "  • Порт: ${LISTEN_PORT}"
 echo ""
 echo "Маршрутизация:"
-echo "  🇷🇺 Сбер, Госуслуги, Т-Банк, Авито, .ru -> Напрямую через этот сервер РФ"
-echo "  🌐 YouTube, Instagram, ChatGPT, заблокированные сайты -> Туннель в Европу"
+echo "  🇷🇺 Сбер, Госуслуги, Т-Банк, Авито, .ru -> Напрямую через локальный шлюз"
+echo "  🌐 Внешние облачные ресурсы, международные сервисы и API -> Защищённый туннель"
 echo "═════════════════════════════════════════════════════════════════════"

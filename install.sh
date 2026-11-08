@@ -57,9 +57,9 @@ CASCADE_DOMAIN="${CASCADE_DOMAIN:-}"
 
 if [ -z "$VPN_DOMAIN" ]; then
     echo -e "${BOLD}Настройка доменных имён и безопасности:${NC}"
-    prompt_var VPN_DOMAIN "Основной домен для NaiveProxy и сайта (например: vpn.mydomain.com)"
-    prompt_var TG_DOMAIN "Поддомен для Telegram Web Proxy (например: tg.mydomain.com)" "tg.${VPN_DOMAIN#vpn.}"
-    prompt_var ACME_EMAIL "Email для SSL-сертификатов Let's Encrypt" "admin@${VPN_DOMAIN#vpn.}"
+    prompt_var VPN_DOMAIN "Основной домен для NaiveProxy и сайта (например: edge.mydomain.com)"
+    prompt_var TG_DOMAIN "Поддомен для Telegram Web Proxy (например: tg.mydomain.com)" "tg.${VPN_DOMAIN#edge.}"
+    prompt_var ACME_EMAIL "Email для SSL-сертификатов Let's Encrypt" "admin@${VPN_DOMAIN#edge.}"
     prompt_var TELEGRAM_BOT_TOKEN "Токен Telegram-бота (от @BotFather)"
     prompt_var TELEGRAM_ADMIN_IDS "Ваш цифровой Telegram ID (от @userinfobot)"
     prompt_var CASCADE_DOMAIN "Домен или IP российского каскадного сервера (опционально, Enter для пропуска)" ""
