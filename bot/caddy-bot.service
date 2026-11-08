@@ -1,0 +1,29 @@
+[Unit]
+Description=Caddy NaiveProxy & Telegram Web Proxy Bot
+After=network.target network-online.target caddy.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=proxy-bot
+Group=proxy-bot
+WorkingDirectory=/opt/proxy-bot
+EnvironmentFile=/opt/proxy-bot/.env
+ExecStart=/opt/proxy-bot/venv/bin/python3 -u /opt/proxy-bot/bot.py
+
+Restart=always
+RestartSec=5s
+
+# Security Hardening & Isolation
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ReadWritePaths=/opt/proxy-bot /tmp /etc/caddy
+
+[Install]
+WantedBy=multi-user.target

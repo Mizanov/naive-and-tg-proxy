@@ -1,0 +1,69 @@
+{
+    # Restrict Caddy admin API to local loopback interface
+    admin 127.0.0.1:2019
+    email {{ACME_EMAIL}}
+}
+
+# ------------------------------------------------------------------------------
+# 1. Telegram Web Proxy Subdomain (WebSocket HTTPS Reverse Proxy)
+# ------------------------------------------------------------------------------
+{{TG_DOMAIN}} {
+    tls {{ACME_EMAIL}} {
+        protocols tls1.2 tls1.3
+    }
+
+    # Security Headers & Fingerprint Stripping
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        -Server
+        -Via
+        -X-Powered-By
+    }
+
+    # Proxy to isolated local Docker tproxy-server
+    reverse_proxy 127.0.0.1:8080 {
+        header_up Host {host}
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
+}
+
+# ------------------------------------------------------------------------------
+# 2. Main Stealth & NaiveProxy Domain (Chromium-grade HTTP/2 Forward Proxy)
+# ------------------------------------------------------------------------------
+{{VPN_DOMAIN}} {
+    tls {{ACME_EMAIL}} {
+        protocols tls1.2 tls1.3
+    }
+
+    # Security Headers & Fingerprint Stripping
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        -Server
+        -Via
+        -X-Powered-By
+    }
+
+    route {
+        # Forward Proxy: NaiveProxy Protocol Handler
+        forward_proxy {
+            basic_auth {{DEFAULT_USER}} {{DEFAULT_PASS}}
+            hide_ip
+            hide_via
+            probe_resistance {{PROBE_SECRET}}.localhost
+        }
+
+        # Authentic Stealth Engineering Showcase (Anti-Slop / AI Design Skills)
+        file_server {
+            root /var/www/site
+            index index.html
+        }
+    }
+}

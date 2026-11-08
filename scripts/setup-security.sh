@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# scripts/setup-security.sh — Linux Hardening, Fail2ban & Sysctl Tuning
+# ==============================================================================
+set -euo pipefail
+
+INFO="\033[1;34m[INFO]\033[0m"
+OK="\033[1;32m[OK]\033[0m"
+
+echo -e "${INFO} Applying kernel network stack hardening & BBR congestion control..."
+cat << 'EOF' > /etc/sysctl.d/99-stealth-security.conf
+# Enable BBR Congestion Control
+net.core.default_qdisc = fq
+net.ipv4.tcp_congestion_control = bbr
+
+# TCP SYN Flood Protection
+net.ipv4.tcp_syncookies = 1
+net.ipv4.tcp_syn_retries = 2
+net.ipv4.tcp_synack_retries = 2
+net.ipv4.tcp_max_syn_backlog = 8192
+
+# Reverse Path Filtering (Spoofing Protection)
+net.ipv4.conf.all.rp_filter = 1
+net.ipv4.conf.default.rp_filter = 1
+
+# Ignore ICMP Broadcasts & Bogus Error Responses
+net.ipv4.icmp_echo_ignore_broadcasts = 1
+net.ipv4.icmp_ignore_bogus_error_responses = 1
+
+# Buffer & Socket Scaling
+net.core.rmem_max = 67108864
+net.core.wmem_max = 67108864
+net.ipv4.tcp_rmem = 4096 87380 33554432
+net.ipv4.tcp_wmem = 4096 65536 33554432
+net.core.somaxconn = 16384
+net.ipv4.tcp_max_tw_buckets = 2000000
+net.ipv4.tcp_fastopen = 3
+
+# File Descriptors Limit
+fs.file-max = 2097152
+EOF
+
+sysctl --system >/dev/null 2>&1 || true
+echo -e "${OK} Kernel parameters applied."
+
+echo -e "${INFO} Installing and configuring Fail2ban with UFW banaction..."
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -qq
+apt-get install -y -qq fail2ban
+
+cat << 'EOF' > /etc/fail2ban/jail.local
+[DEFAULT]
+bantime  = 1d
+findtime = 10m
+maxretry = 5
+banaction = ufw
+banaction_allports = ufw
+
+[sshd]
+enabled = true
+port    = 22
+mode    = aggressive
+backend = systemd
+EOF
+
+systemctl daemon-reload
+systemctl enable --now fail2ban
+systemctl restart fail2ban
+echo -e "${OK} Fail2ban active with 24-hour ban for SSH brute force."
