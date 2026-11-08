@@ -7,8 +7,13 @@ set -euo pipefail
 INFO="\033[1;34m[INFO]\033[0m"
 OK="\033[1;32m[OK]\033[0m"
 
-echo -e "${INFO} Applying kernel network stack hardening & BBR congestion control..."
+echo -e "${INFO} Applying kernel network stack hardening, IPv6 leak protection & BBR..."
 cat << 'EOF' > /etc/sysctl.d/99-stealth-security.conf
+# Disable IPv6 system-wide (Prevents IP/DNS leaks, asymmetric routing & dual-stack issues)
+net.ipv6.conf.all.disable_ipv6 = 1
+net.ipv6.conf.default.disable_ipv6 = 1
+net.ipv6.conf.lo.disable_ipv6 = 1
+
 # Enable BBR Congestion Control
 net.core.default_qdisc = fq
 net.ipv4.tcp_congestion_control = bbr
@@ -41,7 +46,10 @@ fs.file-max = 2097152
 EOF
 
 sysctl --system >/dev/null 2>&1 || true
-echo -e "${OK} Kernel parameters applied."
+if [ -f /etc/default/ufw ]; then
+    sed -i 's/^IPV6=yes/IPV6=no/' /etc/default/ufw 2>/dev/null || true
+fi
+echo -e "${OK} Kernel parameters applied (IPv6 disabled, BBR active)."
 
 echo -e "${INFO} Installing and configuring Fail2ban with UFW banaction..."
 export DEBIAN_FRONTEND=noninteractive

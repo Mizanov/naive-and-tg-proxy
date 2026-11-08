@@ -5,6 +5,9 @@
 set -euo pipefail
 
 echo "Configuring UFW firewall for Stealth Proxy Hub..."
+if [ -f /etc/default/ufw ]; then
+    sed -i 's/^IPV6=yes/IPV6=no/' /etc/default/ufw 2>/dev/null || true
+fi
 ufw default deny incoming
 ufw default allow outgoing
 

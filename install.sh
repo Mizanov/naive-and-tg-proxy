@@ -65,8 +65,23 @@ if [ -z "$VPN_DOMAIN" ]; then
     prompt_var CASCADE_DOMAIN "Домен или IP российского каскадного сервера (опционально, Enter для пропуска)" ""
 fi
 
-# 2. System updates & package installation
-echo -e "\n${INFO} Установка системных пакетов и зависимостей..."
+# 2. Disable IPv6 & install system packages
+echo -e "\n${INFO} Отключение IPv6 по умолчанию (защита от утечек DNS и асимметричной маршрутизации)..."
+cat << 'EOF' > /etc/sysctl.d/99-disable-ipv6.conf
+# Disable IPv6 system-wide (Prevents IP/DNS leaks, dual-stack routing & Let's Encrypt AAAA mismatch)
+net.ipv6.conf.all.disable_ipv6 = 1
+net.ipv6.conf.default.disable_ipv6 = 1
+net.ipv6.conf.lo.disable_ipv6 = 1
+EOF
+sysctl -w net.ipv6.conf.all.disable_ipv6=1 >/dev/null 2>&1 || true
+sysctl -w net.ipv6.conf.default.disable_ipv6=1 >/dev/null 2>&1 || true
+sysctl -w net.ipv6.conf.lo.disable_ipv6=1 >/dev/null 2>&1 || true
+
+if [ -f /etc/default/ufw ]; then
+    sed -i 's/^IPV6=yes/IPV6=no/' /etc/default/ufw 2>/dev/null || true
+fi
+
+echo -e "${INFO} Установка системных пакетов и зависимостей..."
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y -qq \
