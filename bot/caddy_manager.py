@@ -3,6 +3,7 @@
 # ==============================================================================
 import os
 import re
+import json
 import fcntl
 import shutil
 import logging
@@ -10,12 +11,13 @@ import secrets
 import tempfile
 import subprocess
 from contextlib import contextmanager
-from typing import Dict, List, Optional, Callable, Tuple
+from typing import Dict, List, Optional, Callable, Tuple, Any
 
 logger = logging.getLogger("ProxyBot")
 
 DEFAULT_CADDYFILE = "/etc/caddy/Caddyfile"
 DEFAULT_LOCK_FILE = "/tmp/caddy_config.lock"
+DEFAULT_USERS_META = os.getenv("USERS_META_JSON", "/etc/caddy/users_meta.json")
 
 
 class CaddyManagerError(Exception):
@@ -203,14 +205,64 @@ def atomic_modify_caddyfile(
                     pass
 
 
+def load_users_meta(meta_path: str = DEFAULT_USERS_META) -> Dict[str, Any]:
+    """Loads users metadata registry safely."""
+    if not os.path.exists(meta_path):
+        return {}
+    try:
+        with open(meta_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            return data if isinstance(data, dict) else {}
+    except Exception as e:
+        logger.warning("Could not read users_meta file: %s", e)
+        return {}
+
+
+def save_users_meta(meta_dict: Dict[str, Any], meta_path: str = DEFAULT_USERS_META):
+    """Atomically saves users metadata registry."""
+    parent = os.path.dirname(os.path.abspath(meta_path))
+    if parent and not os.path.exists(parent):
+        try:
+            os.makedirs(parent, mode=0o750, exist_ok=True)
+        except OSError:
+            pass
+    tmp_path = f"{meta_path}.tmp_{os.getpid()}"
+    try:
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(meta_dict, f, indent=2, ensure_ascii=False)
+        os.replace(tmp_path, meta_path)
+    finally:
+        if os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
+
+
+def get_user_by_tg_id(tg_id: int, meta_path: str = DEFAULT_USERS_META) -> Optional[Tuple[str, Dict[str, Any]]]:
+    """Finds user by Telegram numeric ID."""
+    meta = load_users_meta(meta_path)
+    for uname, udata in meta.items():
+        if isinstance(udata, dict) and udata.get("tg_id") == tg_id:
+            return uname, udata
+    return None
+
+
+def get_all_users_meta(meta_path: str = DEFAULT_USERS_META) -> Dict[str, Any]:
+    """Returns mapping of username -> user metadata."""
+    return load_users_meta(meta_path)
+
+
 def add_naive_user(
     username: str,
     password: Optional[str] = None,
     caddyfile_path: str = DEFAULT_CADDYFILE,
     control_runner: Callable[..., any] = default_control_runner,
-    lock_path: str = DEFAULT_LOCK_FILE
+    lock_path: str = DEFAULT_LOCK_FILE,
+    extra_meta: Optional[Dict[str, Any]] = None,
+    meta_path: str = DEFAULT_USERS_META
 ) -> str:
-    """Adds a new user to forward_proxy basic_auth block."""
+    """Adds a new user to forward_proxy basic_auth block and saves metadata."""
     valid_user = validate_username(username)
     pwd = password or generate_secure_password(16)
 
@@ -234,21 +286,32 @@ def add_naive_user(
         new_content = content[:match.start()] + prefix + new_body + suffix + content[match.end():]
         return new_content, pwd
 
-    return atomic_modify_caddyfile(
+    res_pwd = atomic_modify_caddyfile(
         mutator_fn=_mutate,
         caddyfile_path=caddyfile_path,
         control_runner=control_runner,
         lock_path=lock_path
     )
 
+    if extra_meta and isinstance(extra_meta, dict):
+        try:
+            meta = load_users_meta(meta_path)
+            meta[valid_user] = extra_meta
+            save_users_meta(meta, meta_path)
+        except Exception as me:
+            logger.warning("Failed to save user meta for %s: %s", valid_user, me)
+
+    return res_pwd
+
 
 def delete_naive_user(
     username: str,
     caddyfile_path: str = DEFAULT_CADDYFILE,
     control_runner: Callable[..., any] = default_control_runner,
-    lock_path: str = DEFAULT_LOCK_FILE
+    lock_path: str = DEFAULT_LOCK_FILE,
+    meta_path: str = DEFAULT_USERS_META
 ) -> bool:
-    """Deletes user from forward_proxy basic_auth block."""
+    """Deletes user from forward_proxy basic_auth block and cleans up metadata."""
     valid_user = validate_username(username)
 
     def _mutate(content: str) -> Tuple[str, bool]:
@@ -261,9 +324,20 @@ def delete_naive_user(
         new_content = pattern.sub("", content)
         return new_content, True
 
-    return atomic_modify_caddyfile(
+    deleted = atomic_modify_caddyfile(
         mutator_fn=_mutate,
         caddyfile_path=caddyfile_path,
         control_runner=control_runner,
         lock_path=lock_path
     )
+
+    if deleted:
+        try:
+            meta = load_users_meta(meta_path)
+            if valid_user in meta:
+                del meta[valid_user]
+                save_users_meta(meta, meta_path)
+        except Exception as me:
+            logger.warning("Failed to clean user meta for %s: %s", valid_user, me)
+
+    return deleted

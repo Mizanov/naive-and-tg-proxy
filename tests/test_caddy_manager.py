@@ -18,6 +18,10 @@ from caddy_manager import (
     add_naive_user,
     delete_naive_user,
     atomic_modify_caddyfile,
+    load_users_meta,
+    save_users_meta,
+    get_user_by_tg_id,
+    get_all_users_meta,
     InvalidUsernameError,
     UserAlreadyExistsError,
     UserNotFoundError,
@@ -99,6 +103,7 @@ class TestCaddyMutation(unittest.TestCase):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.caddyfile_path = os.path.join(self.temp_dir.name, "Caddyfile")
         self.lock_path = os.path.join(self.temp_dir.name, "caddy.lock")
+        self.meta_path = os.path.join(self.temp_dir.name, "users_meta.json")
         with open(self.caddyfile_path, "w", encoding="utf-8") as f:
             f.write(SAMPLE_CADDYFILE)
         self.mock_runner = MagicMock()
@@ -131,6 +136,46 @@ class TestCaddyMutation(unittest.TestCase):
         users = list_users(self.caddyfile_path, lock_path=self.lock_path)
         self.assertIn("charlie", users)
         self.assertEqual(users["charlie"], "CustomPass123")
+
+    def test_add_user_with_metadata_and_lookup(self):
+        meta = {
+            "tg_id": 987654321,
+            "tg_username": "cascade_user",
+            "tg_first_name": "Cascade",
+            "tg_last_name": "Member"
+        }
+        pwd = add_naive_user(
+            "charlie_meta",
+            password="CustomPass123",
+            caddyfile_path=self.caddyfile_path,
+            control_runner=self.mock_runner,
+            lock_path=self.lock_path,
+            extra_meta=meta,
+            meta_path=self.meta_path
+        )
+        self.assertEqual(pwd, "CustomPass123")
+
+        # Lookup by Telegram ID
+        found = get_user_by_tg_id(987654321, meta_path=self.meta_path)
+        self.assertIsNotNone(found)
+        uname, udata = found
+        self.assertEqual(uname, "charlie_meta")
+        self.assertEqual(udata["tg_id"], 987654321)
+        self.assertEqual(udata["tg_username"], "cascade_user")
+
+        # Get all users meta
+        all_meta = get_all_users_meta(meta_path=self.meta_path)
+        self.assertIn("charlie_meta", all_meta)
+
+        # Deleting user also cleans up metadata
+        delete_naive_user(
+            "charlie_meta",
+            caddyfile_path=self.caddyfile_path,
+            control_runner=self.mock_runner,
+            lock_path=self.lock_path,
+            meta_path=self.meta_path
+        )
+        self.assertIsNone(get_user_by_tg_id(987654321, meta_path=self.meta_path))
 
     def test_add_duplicate_user_raises(self):
         with self.assertRaises(UserAlreadyExistsError):
