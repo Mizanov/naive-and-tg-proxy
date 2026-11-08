@@ -124,7 +124,7 @@
 Подключитесь к серверу по SSH и выполните:
 
 ```bash
-git clone https://github.com/your-username/stealth-proxy-cascade.git /opt/stealth-proxy
+git clone https://github.com/Mizanov/stealth-proxy-cascade.git /opt/stealth-proxy
 cd /opt/stealth-proxy
 sudo bash install.sh
 ```
@@ -204,7 +204,7 @@ sudo bash install.sh
 
 ```bash
 # Передайте адрес вашего европейского сервера NaiveProxy
-sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/your-username/stealth-proxy-cascade/main/cascade/setup-cascade.sh || cat setup-cascade.sh)"
+sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/Mizanov/stealth-proxy-cascade/main/cascade/setup-cascade.sh || cat setup-cascade.sh)"
 ```
 
 Скрипт развернет **Sing-box**, загрузит актуальные гео-базы (`geoip-ru`, `geosite-category-gov-ru`, списки доменов Яндекса, VK, банков) и поднимет локальный шлюз с автоматическим сплит-туннелированием.
