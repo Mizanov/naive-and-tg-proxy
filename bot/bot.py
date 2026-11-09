@@ -124,17 +124,34 @@ def generate_qr(text: str) -> io.BytesIO:
     return bio
 
 
+def get_tg_proxy_info() -> Dict[str, str]:
+    info = {
+        "server": TG_DOMAIN,
+        "secret": TG_PROXY_SECRET or "tproxy_secret",
+        "link": f"https://t.me/webproxy?server={TG_DOMAIN}&port=443&secret={TG_PROXY_SECRET or 'tproxy_secret'}"
+    }
+    try:
+        r = default_control_runner("tgproxy-link")
+        link_m = re.search(r"Proxy link:\s+(https://\S+)", r.stdout)
+        server_m = re.search(r"Proxy server \(enter manually\):\s+(\S+)", r.stdout)
+        secret_m = re.search(r"Proxy secret \(enter manually\):\s+(\S+)", r.stdout)
+        if link_m:
+            info["link"] = link_m.group(1).strip()
+        if server_m:
+            info["server"] = server_m.group(1).strip()
+        if secret_m:
+            info["secret"] = secret_m.group(1).strip()
+    except Exception as e:
+        logger.error("Failed to query tgproxy-link: %s", e)
+    return info
+
+
 def get_tg_proxy_secret() -> str:
-    secret = TG_PROXY_SECRET
-    if not secret:
-        try:
-            r = default_control_runner("tgproxy-link")
-            match = re.search(r"secret=(\S+)", r.stdout)
-            if match:
-                secret = match.group(1)
-        except Exception:
-            secret = "tproxy_secret"
-    return secret
+    return get_tg_proxy_info()["secret"]
+
+
+def get_tg_proxy_link() -> str:
+    return get_tg_proxy_info()["link"]
 
 
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -276,8 +293,7 @@ async def request_access_handler(update: Update, context: ContextTypes.DEFAULT_T
 
 async def deliver_credentials(message_target, username: str, pwd: str, is_self_service: bool = False):
     naive_link = f"https://{username}:{pwd}@{VPN_DOMAIN}:443#🛡️ [Naive] Stealth Proxy"
-    secret = get_tg_proxy_secret()
-    tg_link = f"https://t.me/webproxy?server={TG_DOMAIN}&port=443&secret={secret}"
+    tg_link = get_tg_proxy_link()
 
     client_config = {
         "listen": "socks://127.0.0.1:1080",
@@ -390,13 +406,15 @@ async def show_my_naive(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def show_my_tgproxy(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    secret = get_tg_proxy_secret()
-    tg_link = f"https://t.me/webproxy?server={TG_DOMAIN}&port=443&secret={secret}"
+    info = get_tg_proxy_info()
+    tg_link = info["link"]
+    srv = info["server"]
+    sec = info["secret"]
     msg = (
         "✈️ **Официальный Telegram Web Proxy**\n\n"
         "Маскировка MTProxy внутри HTTPS-сессий по протоколу WebSocket.\n\n"
-        f"🖥 **Сервер:** `{TG_DOMAIN}`\n"
-        f"🔐 **Секрет:** `{secret}`\n\n"
+        f"🖥 **Сервер:** `{srv}`\n"
+        f"🔐 **Секрет:** `{sec}`\n\n"
         f"🔗 **Ссылка подключения:**\n`{tg_link}`"
     )
 
@@ -536,7 +554,8 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             r = default_control_runner("caddy-status")
             return "🟢 Active" if "active" in r.stdout.lower() else "🔴 Inactive"
-        except Exception:
+        except Exception as e:
+            logger.error("Failed to check Caddy status: %s", e)
             return "🔴 Error"
 
     def get_docker_status() -> str:
@@ -544,7 +563,8 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             r = default_control_runner("docker-status", "tgweb-proxy")
             status = r.stdout.strip()
             return "🟢 Running" if status == "running" else f"🔴 {status}"
-        except Exception:
+        except Exception as e:
+            logger.error("Failed to check Docker status: %s", e)
             return "⚪ Unchecked"
 
     mem_r = subprocess.run(["free", "-m"], capture_output=True, text=True)
