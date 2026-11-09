@@ -1,5 +1,5 @@
 # ==============================================================================
-# bot/bot.py — Telegram Bot for NaiveProxy, TG Web Proxy & Smart Cascade
+# bot/bot.py — Telegram Bot for NaiveProxy & Telegram Web Proxy
 # ==============================================================================
 import os
 import re
@@ -55,15 +55,22 @@ logger = logging.getLogger("ProxyBot")
 
 # Environment variables
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
-NODE_DOMAIN = os.getenv("NODE_DOMAIN", os.getenv("VPN_DOMAIN", "node.example.com")).strip()
-VPN_DOMAIN = NODE_DOMAIN
+NODE_DOMAIN = os.getenv("NODE_DOMAIN", "node.example.com").strip()
 TG_DOMAIN = os.getenv("TG_DOMAIN", "tg.example.com").strip()
 TG_PROXY_SECRET = os.getenv("TG_PROXY_SECRET", "").strip()
-CASCADE_DOMAIN = os.getenv("CASCADE_DOMAIN", "").strip()
 CADDYFILE = os.getenv("CADDYFILE", "/etc/caddy/Caddyfile").strip()
 
 if not TOKEN:
     logger.warning("TELEGRAM_BOT_TOKEN is not set. Bot will not function until configured.")
+
+
+def escape_md(text: str) -> str:
+    """Escapes Telegram Markdown v1 special characters outside code blocks."""
+    if not text:
+        return ""
+    for ch in ("_", "*", "`", "["):
+        text = text.replace(ch, f"\\{ch}")
+    return text
 
 
 def get_admin_ids() -> Set[int]:
@@ -166,14 +173,17 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def send_admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = (
-        "🛡️ **Stealth Proxy & Telegram Web Proxy Hub**\n\n"
-        "Центр управления сетевым узлом в Германии на базе **Caddy v2** и **Docker**:\n\n"
+        "🛡️ **NaiveProxy & Telegram Web Proxy Server**\n\n"
+        "Центр управления сетевым узлом на базе **Caddy v2** и **Docker**:\n\n"
         "• 🥷 **NaiveProxy (HTTP/2 CONNECT)**: 100% браузерная маскировка трафика через движок Chromium.\n"
-        "• ✈️ **Telegram Web Proxy**: официальный MTProxy-over-HTTPS для мгновенного подключения Telegram в 1 клик.\n\n"
+        "• ✈️ **Telegram Web Proxy**: официальный MTProxy-over-HTTPS для подключения Telegram в 1 клик.\n\n"
         "Используйте кнопки меню ниже для управления:"
     )
     target = update.callback_query.message if update.callback_query else update.message
-    await target.reply_text(msg, parse_mode="Markdown", reply_markup=get_admin_keyboard())
+    try:
+        await target.reply_text(msg, parse_mode="Markdown", reply_markup=get_admin_keyboard())
+    except Exception:
+        await target.reply_text(msg.replace("**", "").replace("`", ""), reply_markup=get_admin_keyboard())
 
 
 async def send_user_cabinet(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -183,8 +193,9 @@ async def send_user_cabinet(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if existing:
         username, _ = existing
+        safe_fn = escape_md(user.first_name or "странник")
         msg = (
-            f"👋 Здравствуйте, {user.first_name}!\n\n"
+            f"👋 Здравствуйте, {safe_fn}!\n\n"
             f"Добро пожаловать в **Личный кабинет участника защищённого прокси-узла**.\n\n"
             f"👤 **Ваш профиль:** `{username}`\n"
             f"🟢 **Статус доступа:** Активен\n\n"
@@ -198,12 +209,16 @@ async def send_user_cabinet(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 InlineKeyboardButton("📖 Инструкция", callback_data="user_guide")
             ]
         ]
-        await target.reply_text(msg, parse_mode="Markdown", reply_markup=get_user_registered_keyboard())
+        try:
+            await target.reply_text(msg, parse_mode="Markdown", reply_markup=get_user_registered_keyboard())
+        except Exception:
+            await target.reply_text(msg.replace("**", "").replace("`", ""), reply_markup=get_user_registered_keyboard())
         await target.reply_text("Выберите необходимое действие:", reply_markup=InlineKeyboardMarkup(keyboard))
     else:
+        safe_fn = escape_md(user.first_name or "друг")
         msg = (
-            f"👋 Здравствуйте, {user.first_name}!\n\n"
-            f"Добро пожаловать в **Персональный портал доступа к скрытому сетевому хабу**.\n\n"
+            f"👋 Здравствуйте, {safe_fn}!\n\n"
+            f"Добро пожаловать в **Персональный портал доступа к сетевому хабу**.\n\n"
             f"Хаб предоставляет персональный доступ к двум защищённым протоколам:\n"
             f"1️⃣ **NaiveProxy**: транспорт через стек Chromium (маскировка под легитимный просмотр веб-сайтов по HTTPS/2).\n"
             f"2️⃣ **Telegram Web Proxy**: официальный прокси для Telegram без сторонних приложений в 1 клик.\n\n"
@@ -216,7 +231,10 @@ async def send_user_cabinet(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("🚀 Получить доступ к шлюзу", callback_data="req_access")],
             [InlineKeyboardButton("📖 Инструкция по подключению", callback_data="user_guide")]
         ]
-        await target.reply_text(msg, parse_mode="Markdown", reply_markup=get_user_unregistered_keyboard())
+        try:
+            await target.reply_text(msg, parse_mode="Markdown", reply_markup=get_user_unregistered_keyboard())
+        except Exception:
+            await target.reply_text(msg.replace("**", "").replace("`", ""), reply_markup=get_user_unregistered_keyboard())
         await target.reply_text("Нажмите для выпуска ключа:", reply_markup=InlineKeyboardMarkup(keyboard))
 
 
@@ -278,24 +296,29 @@ async def request_access_handler(update: Update, context: ContextTypes.DEFAULT_T
     # Notify admins
     for admin_id in get_admin_ids():
         try:
+            safe_fn = escape_md(user.full_name or "—")
+            safe_tg = f"@{escape_md(user.username)}" if user.username else "—"
             admin_notify = (
                 "🔔 **Новый участник получил доступ к шлюзу:**\n\n"
                 f"• Профиль: `{candidate_name}`\n"
-                f"• Имя: {user.full_name}\n"
-                f"• Telegram: @{user.username or '—'} (`{user.id}`)"
+                f"• Имя: {safe_fn}\n"
+                f"• Telegram: {safe_tg} (`{user.id}`)"
             )
-            await context.bot.send_message(chat_id=admin_id, text=admin_notify, parse_mode="Markdown")
+            try:
+                await context.bot.send_message(chat_id=admin_id, text=admin_notify, parse_mode="Markdown")
+            except Exception:
+                await context.bot.send_message(chat_id=admin_id, text=admin_notify.replace("**", "").replace("`", ""))
         except Exception as e:
             logger.debug("Failed to send admin notification to %s: %s", admin_id, e)
 
 
 async def deliver_credentials(message_target, username: str, pwd: str, is_self_service: bool = False):
-    naive_link = f"https://{username}:{pwd}@{VPN_DOMAIN}:443#🛡️ [Naive] Stealth Proxy"
+    naive_link = f"https://{username}:{pwd}@{NODE_DOMAIN}:443#🛡️ [Naive] Proxy"
     tg_link = get_tg_proxy_link()
 
     client_config = {
         "listen": "socks://127.0.0.1:1080",
-        "proxy": f"https://{username}:{pwd}@{VPN_DOMAIN}"
+        "proxy": f"https://{username}:{pwd}@{NODE_DOMAIN}"
     }
     client_json_str = json.dumps(client_config, indent=2)
 
@@ -335,19 +358,33 @@ async def deliver_credentials(message_target, username: str, pwd: str, is_self_s
         )
     except Exception as photo_err:
         logger.warning(f"Failed to send QR photo: {photo_err}, falling back to text message")
+        try:
+            await message_target.reply_text(
+                caption,
+                parse_mode="Markdown",
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                disable_web_page_preview=True
+            )
+        except Exception:
+            await message_target.reply_text(
+                caption.replace("**", "").replace("`", ""),
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                disable_web_page_preview=True
+            )
+
+    try:
         await message_target.reply_text(
-            caption,
+            f"⚡ **Прямая ссылка NaiveProxy для копирования:**\n`{naive_link}`",
             parse_mode="Markdown",
-            reply_markup=InlineKeyboardMarkup(keyboard),
+            reply_markup=reply_kb,
             disable_web_page_preview=True
         )
-
-    await message_target.reply_text(
-        f"⚡ **Прямая ссылка NaiveProxy для копирования:**\n`{naive_link}`",
-        parse_mode="Markdown",
-        reply_markup=reply_kb,
-        disable_web_page_preview=True
-    )
+    except Exception:
+        await message_target.reply_text(
+            f"⚡ Прямая ссылка NaiveProxy для копирования:\n{naive_link}",
+            reply_markup=reply_kb,
+            disable_web_page_preview=True
+        )
 
 
 async def show_my_naive(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -368,10 +405,10 @@ async def show_my_naive(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await target.reply_text(f"⚠️ Учётная запись `{username}` не найдена в Caddyfile. Обратитесь к администратору.")
         return
 
-    naive_link = f"https://{username}:{pwd}@{VPN_DOMAIN}:443#🛡️ [Naive] Stealth Proxy"
+    naive_link = f"https://{username}:{pwd}@{NODE_DOMAIN}:443#🛡️ [Naive] Proxy"
     client_config = {
         "listen": "socks://127.0.0.1:1080",
-        "proxy": f"https://{username}:{pwd}@{VPN_DOMAIN}"
+        "proxy": f"https://{username}:{pwd}@{NODE_DOMAIN}"
     }
     client_json_str = json.dumps(client_config, indent=2)
 
@@ -495,9 +532,9 @@ async def list_users_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         if meta and isinstance(meta, dict):
             parts = []
             if meta.get("tg_username"):
-                parts.append(f"@{meta['tg_username']}")
+                parts.append(f"@{escape_md(str(meta['tg_username']))}")
             if meta.get("tg_first_name"):
-                parts.append(meta["tg_first_name"])
+                parts.append(escape_md(str(meta['tg_first_name'])))
             if meta.get("tg_id"):
                 parts.append(f"ID:{meta['tg_id']}")
             if parts:
@@ -506,7 +543,13 @@ async def list_users_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         msg += f"• `{u}`{tg_info}\n"
         keyboard.append([InlineKeyboardButton(f"🗑 Удалить {u}", callback_data=f"del_{u}")])
 
-    await update.message.reply_text(msg, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
+    reply_markup = InlineKeyboardMarkup(keyboard) if keyboard else None
+    try:
+        await update.message.reply_text(msg, parse_mode="Markdown", reply_markup=reply_markup)
+    except Exception as e:
+        logger.warning("Failed to send list_users_command with Markdown: %s. Falling back to plain text.", e)
+        clean_msg = msg.replace("**", "").replace("`", "")
+        await update.message.reply_text(clean_msg, reply_markup=reply_markup)
 
 
 @admin_required
@@ -561,7 +604,23 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"💾 **Диск:**\n```{df_r.stdout.strip()}```\n\n"
         f"🧠 **Оперативная память:**\n```{mem_r.stdout.strip()}```"
     )
-    await update.message.reply_text(msg, parse_mode="Markdown")
+    reply_kb = get_admin_keyboard()
+    try:
+        await update.message.reply_text(msg, parse_mode="Markdown", reply_markup=reply_kb)
+    except Exception:
+        await update.message.reply_text(msg.replace("**", "").replace("`", ""), reply_markup=reply_kb)
+
+
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Global unhandled exception logger and user notification."""
+    logger.error("Unhandled exception processing update: %s", context.error, exc_info=context.error)
+    if isinstance(update, Update) and update.effective_message:
+        try:
+            await update.effective_message.reply_text(
+                "⚠️ Произошла внутренняя ошибка при обработке запроса. Подробности записаны в системный журнал."
+            )
+        except Exception:
+            pass
 
 
 async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -650,6 +709,7 @@ def main():
 
     app.add_handler(CallbackQueryHandler(callback_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
+    app.add_error_handler(error_handler)
 
     logger.info("ProxyBot starting...")
     app.run_polling()

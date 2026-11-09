@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# install.sh — Turnkey Deployment of Stealth Proxy Hub & Telegram Web Proxy
+# install.sh — Turnkey Deployment of NaiveProxy & Telegram Web Proxy Server
 # ==============================================================================
 set -euo pipefail
 
@@ -14,7 +14,7 @@ BOLD="\033[1m"
 
 echo -e "${BOLD}"
 echo "═════════════════════════════════════════════════════════════════════"
-echo "  🛡️ Stealth Proxy & Telegram Web Proxy Hub — Turnkey Deployment     "
+echo "  🛡️ NaiveProxy & Telegram Web Proxy Server — Turnkey Deployment     "
 echo "═════════════════════════════════════════════════════════════════════"
 echo -e "${NC}"
 
@@ -48,12 +48,11 @@ if [ -f "$ENV_FILE" ]; then
     source "$ENV_FILE"
 fi
 
-NODE_DOMAIN="${NODE_DOMAIN:-${VPN_DOMAIN:-}}"
+NODE_DOMAIN="${NODE_DOMAIN:-}"
 TG_DOMAIN="${TG_DOMAIN:-}"
 ACME_EMAIL="${ACME_EMAIL:-}"
 TELEGRAM_BOT_TOKEN="${TELEGRAM_BOT_TOKEN:-}"
 TELEGRAM_ADMIN_IDS="${TELEGRAM_ADMIN_IDS:-}"
-CASCADE_DOMAIN="${CASCADE_DOMAIN:-}"
 
 if [ -z "$NODE_DOMAIN" ]; then
     echo -e "${BOLD}Настройка доменных имён и безопасности:${NC}"
@@ -62,7 +61,6 @@ if [ -z "$NODE_DOMAIN" ]; then
     prompt_var ACME_EMAIL "Email для SSL-сертификатов Let's Encrypt" "admin@${NODE_DOMAIN#edge.}"
     prompt_var TELEGRAM_BOT_TOKEN "Токен Telegram-бота (от @BotFather)"
     prompt_var TELEGRAM_ADMIN_IDS "Ваш цифровой Telegram ID (от @userinfobot)"
-    prompt_var CASCADE_DOMAIN "Домен или IP каскадного сервера (опционально, Enter для пропуска)" ""
 fi
 
 # 2. Disable IPv6 & install system packages
@@ -113,7 +111,6 @@ INITIAL_PASS=$(openssl rand -hex 10)
 echo -e "${INFO} Генерация конфигурации /etc/caddy/Caddyfile..."
 sed -e "s|{{ACME_EMAIL}}|$ACME_EMAIL|g" \
     -e "s|{{NODE_DOMAIN}}|$NODE_DOMAIN|g" \
-    -e "s|{{VPN_DOMAIN}}|$NODE_DOMAIN|g" \
     -e "s|{{TG_DOMAIN}}|$TG_DOMAIN|g" \
     -e "s|{{DEFAULT_USER}}|$INITIAL_USER|g" \
     -e "s|{{DEFAULT_PASS}}|$INITIAL_PASS|g" \
@@ -161,6 +158,7 @@ install -m 755 "$SCRIPT_DIR/bot/caddy-control.sh" /usr/local/bin/caddy-control
 if ! id -u proxy-bot >/dev/null 2>&1; then
     useradd -r -s /bin/false -d /opt/proxy-bot -m proxy-bot
 fi
+usermod -aG docker proxy-bot 2>/dev/null || true
 
 cat << 'EOF' > /etc/sudoers.d/proxy-bot
 # Restricted privileges for proxy-bot
@@ -184,10 +182,8 @@ cat <<EOF > /opt/proxy-bot/.env
 TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
 TELEGRAM_ADMIN_IDS=${TELEGRAM_ADMIN_IDS}
 NODE_DOMAIN=${NODE_DOMAIN}
-VPN_DOMAIN=${NODE_DOMAIN}
 TG_DOMAIN=${TG_DOMAIN}
 TG_PROXY_SECRET=${TG_PROXY_SECRET}
-CASCADE_DOMAIN=${CASCADE_DOMAIN}
 CADDYFILE=/etc/caddy/Caddyfile
 EOF
 
@@ -206,16 +202,14 @@ systemctl restart caddy-bot
 # Save local .env for updates
 cat <<EOF > "$ENV_FILE"
 NODE_DOMAIN=${NODE_DOMAIN}
-VPN_DOMAIN=${NODE_DOMAIN}
 TG_DOMAIN=${TG_DOMAIN}
 ACME_EMAIL=${ACME_EMAIL}
 TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
 TELEGRAM_ADMIN_IDS=${TELEGRAM_ADMIN_IDS}
-CASCADE_DOMAIN=${CASCADE_DOMAIN}
 EOF
 chmod 600 "$ENV_FILE"
 
-NAIVE_LINK="https://${INITIAL_USER}:${INITIAL_PASS}@${NODE_DOMAIN}:443#🛡️ [Naive] Stealth Proxy"
+NAIVE_LINK="https://${INITIAL_USER}:${INITIAL_PASS}@${NODE_DOMAIN}:443#🛡️ [Naive] Proxy"
 TG_PROXY_LINK="https://t.me/webproxy?server=${TG_DOMAIN}&port=443&secret=${TG_PROXY_SECRET}"
 
 echo ""

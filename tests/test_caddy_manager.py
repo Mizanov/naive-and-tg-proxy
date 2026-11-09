@@ -140,8 +140,8 @@ class TestCaddyMutation(unittest.TestCase):
     def test_add_user_with_metadata_and_lookup(self):
         meta = {
             "tg_id": 987654321,
-            "tg_username": "cascade_user",
-            "tg_first_name": "Cascade",
+            "tg_username": "proxy_user",
+            "tg_first_name": "Proxy",
             "tg_last_name": "Member"
         }
         pwd = add_naive_user(
@@ -161,7 +161,7 @@ class TestCaddyMutation(unittest.TestCase):
         uname, udata = found
         self.assertEqual(uname, "charlie_meta")
         self.assertEqual(udata["tg_id"], 987654321)
-        self.assertEqual(udata["tg_username"], "cascade_user")
+        self.assertEqual(udata["tg_username"], "proxy_user")
 
         # Get all users meta
         all_meta = get_all_users_meta(meta_path=self.meta_path)
@@ -310,6 +310,35 @@ class TestAuth(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(res)
         mock_handler.assert_not_awaited()
         mock_update.effective_message.reply_text.assert_awaited_once()
+
+
+class TestBotFormatting(unittest.TestCase):
+    def test_escape_md(self):
+        # Import escape_md from bot
+        if "qrcode" not in sys.modules:
+            sys.modules["qrcode"] = MagicMock()
+        if "telegram" not in sys.modules:
+            tg_mock = MagicMock()
+            class MockBtn:
+                def __init__(self, text, url=None, callback_data=None):
+                    self.text = text
+                    self.url = url
+                    self.callback_data = callback_data
+            tg_mock.InlineKeyboardButton = MockBtn
+            tg_mock.InlineKeyboardMarkup = MagicMock()
+            tg_mock.ReplyKeyboardMarkup = MagicMock()
+            sys.modules["telegram"] = tg_mock
+        if "telegram.ext" not in sys.modules:
+            sys.modules["telegram.ext"] = MagicMock()
+
+        from bot import escape_md
+        self.assertEqual(escape_md("Olesya_Media"), r"Olesya\_Media")
+        self.assertEqual(escape_md("user_test_name"), r"user\_test\_name")
+        self.assertEqual(escape_md("*star*"), r"\*star\*")
+        self.assertEqual(escape_md("`code`"), r"\`code\`")
+        self.assertEqual(escape_md("[test]"), r"\[test]")
+        self.assertEqual(escape_md(""), "")
+        self.assertEqual(escape_md(None), "")
 
 
 if __name__ == "__main__":

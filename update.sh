@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# update.sh — Safe Rolling Update for Stealth Proxy Hub
+# update.sh — Safe Rolling Update for NaiveProxy & Telegram Web Proxy Server
 # ==============================================================================
 set -euo pipefail
 
@@ -11,7 +11,7 @@ WARN="\033[1;33m[WARN]\033[0m"
 ERR="\033[1;31m[ERROR]\033[0m"
 
 echo "═════════════════════════════════════════════════════════════════════"
-echo "  🔄 Обновление Stealth Proxy Hub & Telegram Web Proxy               "
+echo "  🔄 Обновление NaiveProxy & Telegram Web Proxy Server               "
 echo "═════════════════════════════════════════════════════════════════════"
 
 if [ "$(id -u)" -ne 0 ]; then
@@ -45,7 +45,7 @@ systemctl restart caddy-bot
 
 echo -e "${INFO} Проверка состояния Caddy..."
 if command -v caddy >/dev/null 2>&1; then
-    caddy validate --config /etc/caddy/Caddyfile >/dev/null 2>&1 && systemctl reload caddy || systemctl restart caddy
+    caddy validate --adapter caddyfile --config /etc/caddy/Caddyfile >/dev/null 2>&1 && systemctl reload caddy || systemctl restart caddy
 fi
 
 echo -e "\n═════════════════════════════════════════════════════════════════════"
