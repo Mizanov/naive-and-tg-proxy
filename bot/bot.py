@@ -539,8 +539,9 @@ async def cascade_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     mixed_pass = os.getenv("CASCADE_PASS", "3eadbaae7070f8ac1dbb").strip()
     mixed_port = os.getenv("CASCADE_PORT", "10808").strip()
 
-    vless_link = f"vless://{vless_uuid}@{host}:443?type=ws&security=tls&sni={host}&host={host}&path=%2Fgateway-stream%2F#🇷🇺 [Smart Cascade] Moscow"
-    socks_link = f"socks5://{mixed_user}:{mixed_pass}@{host}:{mixed_port}#🇷🇺 [Smart Cascade SOCKS5] Moscow"
+    vless_link = f"vless://{vless_uuid}@{host}:443?encryption=none&type=ws&security=tls&sni={host}&host={host}&path=%2Fgateway-stream%2F&udp=1#🇷🇺 [Smart Cascade] Moscow"
+    vless_ip_link = f"vless://{vless_uuid}@89.125.34.78:443?encryption=none&type=ws&security=tls&sni={host}&host={host}&path=%2Fgateway-stream%2F&udp=1#🇷🇺 [Smart Cascade IP] Moscow"
+    socks_link = f"socks5://{mixed_user}:{mixed_pass}@89.125.34.78:{mixed_port}#🇷🇺 [Smart Cascade SOCKS5] Moscow"
 
     msg = (
         "🇷🇺 **Российский каскадный шлюз (Smart Cascade)**\n\n"
@@ -550,15 +551,16 @@ async def cascade_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "• Российские сервисы (Сбер, Т-Банк, Госуслуги, Авито, .ru) открываются напрямую с московского IP (0 задержек, без капч).\n"
         "• Международные платформы и API автоматически направляются в зашифрованный туннель в Европу.\n"
         "• Внешний трафик выглядит как легитимный HTTPS на порт 443.\n\n"
-        "1️⃣ **Защищённый VLESS-WebSocket (Рекомендуется):**\n"
-        f"`{vless_link}`\n\n"
+        "1️⃣ **Защищённый VLESS-WS (Основной с UDP Relay):**\n"
+        f"`{vless_ip_link}`\n\n"
         "2️⃣ **Смешанный прокси (Mixed SOCKS5 / HTTP):**\n"
-        f"• Хост: `{host}` | Порт: `{mixed_port}`\n"
+        f"• Хост: `89.125.34.78` | Порт: `{mixed_port}`\n"
         f"• Логин: `{mixed_user}` | Пароль: `{mixed_pass}`\n"
-        f"• Ссылка для импорта: `{socks_link}`"
+        f"• Ссылка для импорта: `{socks_link}`\n\n"
+        "💡 *В Shadowrocket переключите Глобальную маршрутизацию в режим «Прокси» (Proxy), так как разделение РФ/Европа уже работает на сервере.*"
     )
 
-    qr_img = generate_qr(vless_link)
+    qr_img = generate_qr(vless_ip_link)
     target = update.callback_query.message if update.callback_query else update.message
     if update.callback_query:
         await update.callback_query.answer()

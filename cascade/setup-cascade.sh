@@ -153,7 +153,6 @@ cat <<EOF > /etc/sing-box/config.json
     "rules": [
       {
         "rule_set": [
-          "geoip-ru",
           "category-gov-ru",
           "yandex",
           "vk",
