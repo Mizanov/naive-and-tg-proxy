@@ -85,7 +85,7 @@ echo -e "${INFO} Установка системных пакетов и зав�
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y -qq \
-    curl git jq ufw fail2ban python3 python3-venv python3-pip \
+    curl git jq ufw fail2ban python3 python3-venv python3-pip python3-systemd \
     libcap2-bin docker.io
 
 systemctl enable --now docker

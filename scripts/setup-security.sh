@@ -54,7 +54,7 @@ echo -e "${OK} Kernel parameters applied (IPv6 disabled, BBR active)."
 echo -e "${INFO} Installing and configuring Fail2ban with UFW banaction..."
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
-apt-get install -y -qq fail2ban
+apt-get install -y -qq fail2ban python3-systemd
 
 cat << 'EOF' > /etc/fail2ban/jail.local
 [DEFAULT]
