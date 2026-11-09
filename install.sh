@@ -102,7 +102,7 @@ bash "$SCRIPT_DIR/caddy/build-caddy.sh"
 # 5. Prepare Web Directories & Stealth Showcase Site
 echo -e "${INFO} Развёртывание витрины и сайта-маскировки..."
 mkdir -p /var/www/site /etc/caddy
-cp "$SCRIPT_DIR/site/index.html" /var/www/site/index.html
+cp -r "$SCRIPT_DIR/site/"* /var/www/site/
 
 # 6. Generate Initial Cryptographic Secrets
 PROBE_SECRET=$(openssl rand -hex 12)
@@ -148,6 +148,7 @@ docker run -d \
     -e "TPROXY_HOSTNAME=$TG_DOMAIN" \
     -e "TPROXY_SECRET=$TG_PROXY_SECRET" \
     -e "TLS_MODE=off" \
+    -v /var/www/site:/site:ro \
     --security-opt no-new-privileges:true \
     --memory 128m \
     --cpus 0.5 \
