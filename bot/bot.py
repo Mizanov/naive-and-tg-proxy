@@ -533,19 +533,41 @@ async def proxy_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 @admin_required
 async def cascade_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    host = CASCADE_DOMAIN or "msk.example.ru"
+    host = CASCADE_DOMAIN or "saltrss.duckdns.org"
+    vless_uuid = os.getenv("CASCADE_VLESS_UUID", "c79b8760-1718-4e50-8d62-48bc61978193").strip()
+    mixed_user = os.getenv("CASCADE_USER", "mizanov").strip()
+    mixed_pass = os.getenv("CASCADE_PASS", "3eadbaae7070f8ac1dbb").strip()
+    mixed_port = os.getenv("CASCADE_PORT", "10808").strip()
+
+    vless_link = f"vless://{vless_uuid}@{host}:443?type=ws&security=tls&path=%2Fgateway-stream%2F#🇷🇺 [Smart Cascade] Moscow"
+    socks_link = f"socks5://{mixed_user}:{mixed_pass}@{host}:{mixed_port}#🇷🇺 [Smart Cascade SOCKS5] Moscow"
+
     msg = (
         "🇷🇺 **Российский каскадный шлюз (Smart Cascade)**\n\n"
         "Схема маршрутизации:\n"
-        "`Клиент ➔ Сервер Москва (Шлюз) ➔ Этот сервер (Европа)`\n\n"
+        "`Клиент ➔ Сервер Москва (Шлюз) ➔ Сервер Германия (Транзит)`\n\n"
         "🌟 **Преимущества каскада:**\n"
-        "• Российские сервисы (Сбер, Т-Банк, Госуслуги, Авито) открываются напрямую с локального IP (без задержек и капч).\n"
-        "• Внешние облачные ресурсы и международные платформы безопасно направляются в зашифрованный туннель.\n"
-        "• Для интернет-провайдеров подключение выглядит как внутренний защищённый трафик.\n\n"
-        f"📍 **Шлюз:** `{host}`\n"
-        "Инструкция по развёртыванию шлюза на сервере в РФ: скрипт `cascade/setup-cascade.sh`."
+        "• Российские сервисы (Сбер, Т-Банк, Госуслуги, Авито, .ru) открываются напрямую с московского IP (0 задержек, без капч).\n"
+        "• Международные платформы и API автоматически направляются в зашифрованный туннель в Европу.\n"
+        "• Внешний трафик выглядит как легитимный HTTPS на порт 443.\n\n"
+        "1️⃣ **Защищённый VLESS-WebSocket (Рекомендуется):**\n"
+        f"`{vless_link}`\n\n"
+        "2️⃣ **Смешанный прокси (Mixed SOCKS5 / HTTP):**\n"
+        f"• Хост: `{host}` | Порт: `{mixed_port}`\n"
+        f"• Логин: `{mixed_user}` | Пароль: `{mixed_pass}`\n"
+        f"• Ссылка для импорта: `{socks_link}`"
     )
-    await update.message.reply_text(msg, parse_mode="Markdown")
+
+    qr_img = generate_qr(vless_link)
+    target = update.callback_query.message if update.callback_query else update.message
+    if update.callback_query:
+        await update.callback_query.answer()
+
+    await target.reply_photo(
+        photo=InputFile(qr_img, filename="cascade_qr.png"),
+        caption=msg,
+        parse_mode="Markdown"
+    )
 
 
 @admin_required

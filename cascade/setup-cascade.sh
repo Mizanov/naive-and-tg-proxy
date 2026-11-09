@@ -2,10 +2,10 @@
 # ==============================================================================
 # cascade/setup-cascade.sh — One-Click Smart Cascade Gateway for Russian VPS
 # ==============================================================================
-# Run this script on your Russian VPS (e.g., Moscow Rebrain/Timeweb/Selectel).
+# Run this script on your Russian VPS (e.g., Moscow / LandVPS / Timeweb / Selectel).
 # It configures an intelligent split-routing gateway:
 # - Russian banks, Gosuslugi, .ru sites -> Direct Outbound (Russian IP, 0 captcha)
-# - Blocked / International traffic -> Encrypted HTTP/2 Tunnel to European Node
+# - Global / International traffic -> Encrypted Chromium-grade HTTP/2 Tunnel to European Node
 # ==============================================================================
 set -euo pipefail
 
@@ -39,52 +39,98 @@ prompt_var() {
     eval "$var_name=\"$val\""
 }
 
-prompt_var EUROPE_DOMAIN "Домен удалённого сервера с NaiveProxy (например, edge.mydomain.com)"
-prompt_var NAIVE_USER "Имя пользователя NaiveProxy (из Telegram-бота)"
-prompt_var NAIVE_PASS "Пароль NaiveProxy (из Telegram-бота)"
-prompt_var LISTEN_PORT "Порт для подключения клиентов к локальному шлюзу (Mixed HTTP/SOCKS5)" "10808"
+prompt_var EUROPE_DOMAIN "Домен удалённого европейского узла с NaiveProxy" "cascadevps.duckdns.org"
+prompt_var NAIVE_USER "Имя пользователя NaiveProxy (из Telegram-бота)" "user_46ec57"
+prompt_var NAIVE_PASS "Пароль NaiveProxy (из Telegram-бота)" "6e9e82891daf2efc44e9"
+prompt_var MIXED_USER "Имя пользователя для шлюза (Mixed SOCKS5/HTTP)" "mizanov"
+prompt_var MIXED_PASS "Пароль для шлюза (Mixed SOCKS5/HTTP)" "3eadbaae7070f8ac1dbb"
+prompt_var VLESS_UUID "UUID для скрытого VLESS-WebSocket шлюза" "c79b8760-1718-4e50-8d62-48bc61978193"
+prompt_var LISTEN_PORT "Порт для подключения клиентов (Mixed SOCKS5/HTTP)" "10808"
 
-echo -e "\n${INFO} Установка зависимостей (curl, jq)..."
+echo -e "\n${INFO} Установка базовых зависимостей (curl, jq, xz-utils)..."
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
-apt-get install -y -qq curl jq
+apt-get install -y -qq curl jq xz-utils
 
-echo -e "${INFO} Установка легковесного ядра Sing-Box..."
-if ! command -v sing-box >/dev/null 2>&1; then
-    bash -c "$(curl -fsSL https://sing-box.app/deb/install.sh)" || {
-        echo -e "${INFO} Резервная установка Sing-Box из бинарного релиза..."
-        SB_VER="1.14.4"
-        ARCH=$(uname -m)
-        case "$ARCH" in
-            x86_64) ARCH_NAME="amd64" ;;
-            aarch64) ARCH_NAME="arm64" ;;
-            *) echo -e "${ERR} Неподдерживаемая архитектура: $ARCH"; exit 1 ;;
-        esac
-        curl -fsSL "https://github.com/SagerNet/sing-box/releases/download/v${SB_VER}/sing-box-${SB_VER}-linux-${ARCH_NAME}.tar.gz" -o /tmp/sb.tar.gz
-        tar -xzf /tmp/sb.tar.gz -C /tmp
-        install -m 755 /tmp/sing-box-*/sing-box /usr/local/bin/sing-box
-        rm -rf /tmp/sb*
-    }
+echo -e "${INFO} Установка официального NaiveProxy клиента (Chromium Transport)..."
+if ! command -v naive >/dev/null 2>&1; then
+    NAIVE_VER="154.0.8037.49-5"
+    curl -fsSL "https://github.com/klzgrad/naiveproxy/releases/download/v${NAIVE_VER}/naiveproxy-v${NAIVE_VER}-linux-x64.tar.xz" -o /tmp/naive.tar.xz
+    tar -xJf /tmp/naive.tar.xz -C /tmp
+    install -m 755 /tmp/naiveproxy-*/naive /usr/local/bin/naive
+    rm -rf /tmp/naive*
 fi
 
+echo -e "${INFO} Установка высокопроизводительного ядра маршрутизации Sing-Box..."
+if ! command -v sing-box >/dev/null 2>&1; then
+    SB_VER="1.14.4"
+    ARCH=$(uname -m)
+    case "$ARCH" in
+        x86_64) ARCH_NAME="amd64" ;;
+        aarch64) ARCH_NAME="arm64" ;;
+        *) echo -e "${ERR} Неподдерживаемая архитектура: $ARCH"; exit 1 ;;
+    esac
+    curl -fsSL "https://github.com/SagerNet/sing-box/releases/download/v${SB_VER}/sing-box-${SB_VER}-linux-${ARCH_NAME}.tar.gz" -o /tmp/sb.tar.gz
+    tar -xzf /tmp/sb.tar.gz -C /tmp
+    install -m 755 /tmp/sing-box-*/sing-box /usr/local/bin/sing-box
+    rm -rf /tmp/sb*
+fi
+
+echo -e "${INFO} Настройка транзитного туннеля NaiveProxy (naive-cascade.service)..."
+mkdir -p /etc/naive
+cat <<EOF > /etc/naive/config.json
+{
+  "listen": "socks://127.0.0.1:1080",
+  "proxy": "https://${NAIVE_USER}:${NAIVE_PASS}@${EUROPE_DOMAIN}"
+}
+EOF
+chmod 600 /etc/naive/config.json
+
+cat << 'EOF' > /etc/systemd/system/naive-cascade.service
+[Unit]
+Description=NaiveProxy Smart Cascade Upstream Tunnel
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/naive /etc/naive/config.json
+Restart=always
+RestartSec=5s
+LimitNOFILE=1048576
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable --now naive-cascade.service
+systemctl restart naive-cascade.service
+
+echo -e "${INFO} Загрузка оптимизированных бинарных правил маршрутизации (.srs)..."
 RULESET_DIR="/var/lib/sing-box/rulesets"
 mkdir -p "$RULESET_DIR" /etc/sing-box
 
-echo -e "${INFO} Загрузка оптимизированных бинарных правил маршрутизации (.srs)..."
-download_srs() {
+download_geoip() {
     local name="$1"
-    local url="https://raw.githubusercontent.com/SagerNet/sing-ruleset/rule-set-format/${name}"
+    local url="https://raw.githubusercontent.com/SagerNet/sing-geoip/rule-set/${name}"
     curl -fsSL --retry 3 --connect-timeout 5 "$url" -o "$RULESET_DIR/${name}" 2>/dev/null || true
 }
 
-download_srs "geoip-ru.srs"
-download_srs "geosite-category-gov-ru.srs"
-download_srs "geosite-category-ads-all.srs"
-download_srs "geosite-yandex.srs"
-download_srs "geosite-vk.srs"
-download_srs "geosite-mailru.srs"
+download_geosite() {
+    local name="$1"
+    local url="https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/${name}"
+    curl -fsSL --retry 3 --connect-timeout 5 "$url" -o "$RULESET_DIR/${name}" 2>/dev/null || true
+}
 
-echo -e "${INFO} Генерация конфигурации умного сплит-роутинга..."
+download_geoip "geoip-ru.srs"
+download_geosite "geosite-category-gov-ru.srs"
+download_geosite "geosite-category-ads-all.srs"
+download_geosite "geosite-yandex.srs"
+download_geosite "geosite-vk.srs"
+download_geosite "geosite-mailru.srs"
+
+echo -e "${INFO} Генерация конфигурации умного сплит-роутинга Sing-Box..."
 cat <<EOF > /etc/sing-box/config.json
 {
   "log": {
@@ -100,7 +146,8 @@ cat <<EOF > /etc/sing-box/config.json
       {
         "type": "https",
         "tag": "dns-remote",
-        "server": "https://1.1.1.1/dns-query"
+        "server": "https://1.1.1.1/dns-query",
+        "detour": "naive-europe"
       }
     ],
     "rules": [
@@ -113,17 +160,53 @@ cat <<EOF > /etc/sing-box/config.json
           "mailru"
         ],
         "server": "dns-local"
+      },
+      {
+        "domain_suffix": [
+          ".ru",
+          ".su",
+          ".рф",
+          "sberbank.ru",
+          "tbank.ru",
+          "tinkoff.ru",
+          "gosuslugi.ru",
+          "avito.ru",
+          "ozon.ru",
+          "wildberries.ru",
+          "kinopoisk.ru"
+        ],
+        "server": "dns-local"
       }
     ]
   },
   "inbounds": [
     {
+      "type": "vless",
+      "tag": "vless-in",
+      "listen": "127.0.0.1",
+      "listen_port": 10086,
+      "users": [
+        {
+          "name": "${MIXED_USER}",
+          "uuid": "${VLESS_UUID}"
+        }
+      ],
+      "transport": {
+        "type": "ws",
+        "path": "/gateway-stream/"
+      }
+    },
+    {
       "type": "mixed",
       "tag": "mixed-in",
       "listen": "0.0.0.0",
       "listen_port": ${LISTEN_PORT},
-      "sniff": true,
-      "sniff_override_destination": true
+      "users": [
+        {
+          "username": "${MIXED_USER}",
+          "password": "${MIXED_PASS}"
+        }
+      ]
     }
   ],
   "outbounds": [
@@ -132,16 +215,10 @@ cat <<EOF > /etc/sing-box/config.json
       "tag": "direct"
     },
     {
-      "type": "http",
+      "type": "socks",
       "tag": "naive-europe",
-      "server": "${EUROPE_DOMAIN}",
-      "server_port": 443,
-      "username": "${NAIVE_USER}",
-      "password": "${NAIVE_PASS}",
-      "tls": {
-        "enabled": true,
-        "server_name": "${EUROPE_DOMAIN}"
-      }
+      "server": "127.0.0.1",
+      "server_port": 1080
     },
     {
       "type": "block",
@@ -149,6 +226,7 @@ cat <<EOF > /etc/sing-box/config.json
     }
   ],
   "route": {
+    "default_domain_resolver": "dns-local",
     "rule_set": [
       {
         "type": "local",
@@ -189,6 +267,9 @@ cat <<EOF > /etc/sing-box/config.json
     ],
     "rules": [
       {
+        "action": "sniff"
+      },
+      {
         "rule_set": ["category-ads-all"],
         "outbound": "block"
       },
@@ -212,9 +293,9 @@ cat <<EOF > /etc/sing-box/config.json
           "tinkoff.ru",
           "gosuslugi.ru",
           "avito.ru",
-          "kinopoisk.ru",
           "ozon.ru",
-          "wildberries.ru"
+          "wildberries.ru",
+          "kinopoisk.ru"
         ],
         "outbound": "direct"
       }
@@ -224,6 +305,7 @@ cat <<EOF > /etc/sing-box/config.json
   }
 }
 EOF
+chmod 600 /etc/sing-box/config.json
 
 echo -e "${INFO} Проверка валидности конфигурации Sing-Box..."
 sing-box check -c /etc/sing-box/config.json
@@ -231,19 +313,25 @@ sing-box check -c /etc/sing-box/config.json
 echo -e "${INFO} Настройка systemd-сервиса Sing-Box..."
 cat << 'EOF' > /etc/systemd/system/sing-box.service
 [Unit]
-Description=Sing-Box Smart Cascade Service
-After=network.target
+Description=Sing-Box Smart Cascade Router
+After=network.target network-online.target naive-cascade.service
+Wants=network-online.target
+Requires=naive-cascade.service
 
 [Service]
 Type=simple
 ExecStart=/usr/local/bin/sing-box run -c /etc/sing-box/config.json
-Restart=on-failure
+Restart=always
 RestartSec=5s
 LimitNOFILE=1048576
 
 [Install]
 WantedBy=multi-user.target
 EOF
+
+if command -v ufw >/dev/null 2>&1; then
+    ufw allow ${LISTEN_PORT}/tcp comment 'Smart Cascade Mixed Proxy' >/dev/null 2>&1 || true
+fi
 
 systemctl daemon-reload
 systemctl enable --now sing-box.service
@@ -253,13 +341,17 @@ RU_SERVER_IP=$(curl -s4 https://api.ipify.org || curl -s4 https://ifconfig.me ||
 
 echo "═════════════════════════════════════════════════════════════════════"
 echo -e "  🎉 ${OK} Каскадный шлюз успешно настроен и запущен!"
-echo "═════════════════════════════════════════════════════════════════════"
-echo "Параметры подключения клиентов в Shadowrocket / NekoBox / v2rayN:"
-echo "  • Тип: SOCKS5 или HTTP"
-echo "  • Сервер: ${RU_SERVER_IP}"
+echo "═════════════════════════════════════════════"
+echo "1️⃣ Защищённое подключение VLESS-WS-TLS (порт 443 Nginx):"
+echo "  vless://${VLESS_UUID}@${RU_SERVER_IP}:443?type=ws&security=tls&path=%2Fgateway-stream%2F#SmartCascade"
+echo ""
+echo "2️⃣ Прямое подключение Mixed SOCKS5/HTTP (порт ${LISTEN_PORT}):"
+echo "  • Хост: ${RU_SERVER_IP}"
 echo "  • Порт: ${LISTEN_PORT}"
+echo "  • Логин: ${MIXED_USER}"
+echo "  • Пароль: ${MIXED_PASS}"
 echo ""
 echo "Маршрутизация:"
-echo "  🇷🇺 Сбер, Госуслуги, Т-Банк, Авито, .ru -> Напрямую через локальный шлюз"
-echo "  🌐 Внешние облачные ресурсы, международные сервисы и API -> Защищённый туннель"
+echo "  🇷🇺 Сбер, Госуслуги, Т-Банк, Авито, .ru -> Напрямую через московский узел"
+echo "  🌐 Международные сервисы и облачные платформы -> Защищённый туннель в Европу"
 echo "═════════════════════════════════════════════════════════════════════"

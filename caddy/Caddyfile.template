@@ -3,6 +3,7 @@
     admin 127.0.0.1:2019
     email {{ACME_EMAIL}}
     default_bind 0.0.0.0
+    order forward_proxy before file_server
 }
 
 # ------------------------------------------------------------------------------
@@ -37,7 +38,7 @@
 # ------------------------------------------------------------------------------
 # 2. Main Stealth & NaiveProxy Domain (Chromium-grade HTTP/2 Forward Proxy)
 # ------------------------------------------------------------------------------
-{{NODE_DOMAIN}} {
+:443, {{NODE_DOMAIN}} {
     bind 0.0.0.0
     tls {{ACME_EMAIL}} {
         protocols tls1.2 tls1.3
