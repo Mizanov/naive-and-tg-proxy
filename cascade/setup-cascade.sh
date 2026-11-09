@@ -125,7 +125,6 @@ download_geosite() {
 
 download_geoip "geoip-ru.srs"
 download_geosite "geosite-category-gov-ru.srs"
-download_geosite "geosite-category-ads-all.srs"
 download_geosite "geosite-yandex.srs"
 download_geosite "geosite-vk.srs"
 download_geosite "geosite-mailru.srs"
@@ -233,12 +232,6 @@ cat <<EOF > /etc/sing-box/config.json
     "rule_set": [
       {
         "type": "local",
-        "tag": "category-ads-all",
-        "format": "binary",
-        "path": "${RULESET_DIR}/geosite-category-ads-all.srs"
-      },
-      {
-        "type": "local",
         "tag": "category-gov-ru",
         "format": "binary",
         "path": "${RULESET_DIR}/geosite-category-gov-ru.srs"
@@ -279,10 +272,6 @@ cat <<EOF > /etc/sing-box/config.json
       {
         "port": 53,
         "action": "hijack-dns"
-      },
-      {
-        "rule_set": ["category-ads-all"],
-        "outbound": "block"
       },
       {
         "rule_set": [
