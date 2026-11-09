@@ -75,3 +75,27 @@ systemctl daemon-reload
 systemctl enable --now fail2ban
 systemctl restart fail2ban
 echo -e "${OK} Fail2ban active with 24-hour ban for SSH brute force."
+
+# SSH Hardening (Enforcing Key-Only Authentication, Disabling Passwords)
+echo -e "${INFO} Configuring SSH security (Enforcing key-only authentication, disabling passwords)..."
+mkdir -p /etc/ssh/sshd_config.d
+
+if [ -s /root/.ssh/authorized_keys ]; then
+    cat << 'EOF' > /etc/ssh/sshd_config.d/01-security.conf
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PubkeyAuthentication yes
+PermitRootLogin prohibit-password
+EOF
+    # Ensure no existing configuration file overrides PasswordAuthentication to yes
+    sed -i 's/PasswordAuthentication yes/PasswordAuthentication no/g' /etc/ssh/sshd_config.d/*.conf /etc/ssh/sshd_config 2>/dev/null || true
+
+    if sshd -t >/dev/null 2>&1; then
+        systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || true
+        echo -e "${OK} SSH configured: Key-only authentication strictly enforced (PasswordAuthentication=no)."
+    else
+        echo -e "${INFO} sshd configuration test failed; changes not reloaded to avoid lockout."
+    fi
+else
+    echo -e "${INFO} No keys found in /root/.ssh/authorized_keys! Keeping PasswordAuthentication enabled temporarily to prevent lockout. Add your SSH public key and re-run this script."
+fi
