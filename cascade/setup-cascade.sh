@@ -363,7 +363,7 @@ echo "════════════════════════�
 echo -e "  🎉 ${OK} Каскадный шлюз успешно настроен и запущен!"
 echo "═════════════════════════════════════════════"
 echo "1️⃣ Защищённое подключение VLESS-WS-TLS (порт 443 Nginx):"
-echo "  vless://${VLESS_UUID}@${RU_SERVER_IP}:443?type=ws&security=tls&path=%2Fgateway-stream%2F#SmartCascade"
+echo "  vless://${VLESS_UUID}@${RU_SERVER_IP}:443?type=ws&security=tls&sni=${RU_SERVER_IP}&host=${RU_SERVER_IP}&path=%2Fgateway-stream%2F#SmartCascade"
 echo ""
 echo "2️⃣ Прямое подключение Mixed SOCKS5/HTTP (порт ${LISTEN_PORT}):"
 echo "  • Хост: ${RU_SERVER_IP}"

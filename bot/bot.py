@@ -539,7 +539,7 @@ async def cascade_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     mixed_pass = os.getenv("CASCADE_PASS", "3eadbaae7070f8ac1dbb").strip()
     mixed_port = os.getenv("CASCADE_PORT", "10808").strip()
 
-    vless_link = f"vless://{vless_uuid}@{host}:443?type=ws&security=tls&path=%2Fgateway-stream%2F#🇷🇺 [Smart Cascade] Moscow"
+    vless_link = f"vless://{vless_uuid}@{host}:443?type=ws&security=tls&sni={host}&host={host}&path=%2Fgateway-stream%2F#🇷🇺 [Smart Cascade] Moscow"
     socks_link = f"socks5://{mixed_user}:{mixed_pass}@{host}:{mixed_port}#🇷🇺 [Smart Cascade SOCKS5] Moscow"
 
     msg = (
