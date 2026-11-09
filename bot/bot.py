@@ -82,8 +82,7 @@ def is_admin_user(user_id: Optional[int]) -> bool:
 def get_admin_keyboard():
     keyboard = [
         ["➕ Создать NaiveProxy", "👥 Список участников"],
-        ["🚀 Telegram Web Proxy", "🇷🇺 Каскадный шлюз"],
-        ["📊 Статус сервера"]
+        ["🚀 Telegram Web Proxy", "📊 Статус сервера"]
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
@@ -168,10 +167,9 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def send_admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = (
         "🛡️ **Stealth Proxy & Telegram Web Proxy Hub**\n\n"
-        "Центр управления скрытым сетевым узлом на базе **Caddy v2** и **Docker**:\n\n"
+        "Центр управления сетевым узлом в Германии на базе **Caddy v2** и **Docker**:\n\n"
         "• 🥷 **NaiveProxy (HTTP/2 CONNECT)**: 100% браузерная маскировка трафика через движок Chromium.\n"
-        "• ✈️ **Telegram Web Proxy**: официальный MTProxy-over-HTTPS для мгновенного подключения Telegram в 1 клик.\n"
-        "• 🇷🇺 **Каскадный шлюз**: умный сплит-роутинг через сервер в РФ (Госуслуги/Банки напрямую, остальное в туннель).\n\n"
+        "• ✈️ **Telegram Web Proxy**: официальный MTProxy-over-HTTPS для мгновенного подключения Telegram в 1 клик.\n\n"
         "Используйте кнопки меню ниже для управления:"
     )
     target = update.callback_query.message if update.callback_query else update.message
@@ -532,47 +530,6 @@ async def proxy_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 @admin_required
-async def cascade_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    host = CASCADE_DOMAIN or "saltrss.duckdns.org"
-    vless_uuid = os.getenv("CASCADE_VLESS_UUID", "c79b8760-1718-4e50-8d62-48bc61978193").strip()
-    mixed_user = os.getenv("CASCADE_USER", "mizanov").strip()
-    mixed_pass = os.getenv("CASCADE_PASS", "3eadbaae7070f8ac1dbb").strip()
-    mixed_port = os.getenv("CASCADE_PORT", "10808").strip()
-
-    vless_link = f"vless://{vless_uuid}@{host}:443?encryption=none&type=ws&security=tls&sni={host}&host={host}&path=%2Fgateway-stream%2F&udp=1#🇷🇺 [Smart Cascade] Moscow"
-    vless_ip_link = f"vless://{vless_uuid}@89.125.34.78:443?encryption=none&type=ws&security=tls&sni={host}&host={host}&path=%2Fgateway-stream%2F&udp=1#🇷🇺 [Smart Cascade IP] Moscow"
-    socks_link = f"socks5://{mixed_user}:{mixed_pass}@89.125.34.78:{mixed_port}#🇷🇺 [Smart Cascade SOCKS5] Moscow"
-
-    msg = (
-        "🇷🇺 **Российский каскадный шлюз (Smart Cascade)**\n\n"
-        "Схема маршрутизации:\n"
-        "`Клиент ➔ Сервер Москва (Шлюз) ➔ Сервер Германия (Транзит)`\n\n"
-        "🌟 **Преимущества каскада:**\n"
-        "• Российские сервисы (Сбер, Т-Банк, Госуслуги, Авито, .ru) открываются напрямую с московского IP (0 задержек, без капч).\n"
-        "• Международные платформы и API автоматически направляются в зашифрованный туннель в Европу.\n"
-        "• Внешний трафик выглядит как легитимный HTTPS на порт 443.\n\n"
-        "1️⃣ **Защищённый VLESS-WS (Основной с UDP Relay):**\n"
-        f"`{vless_ip_link}`\n\n"
-        "2️⃣ **Смешанный прокси (Mixed SOCKS5 / HTTP):**\n"
-        f"• Хост: `89.125.34.78` | Порт: `{mixed_port}`\n"
-        f"• Логин: `{mixed_user}` | Пароль: `{mixed_pass}`\n"
-        f"• Ссылка для импорта: `{socks_link}`\n\n"
-        "💡 *В Shadowrocket переключите Глобальную маршрутизацию в режим «Прокси» (Proxy), так как разделение РФ/Европа уже работает на сервере.*"
-    )
-
-    qr_img = generate_qr(vless_ip_link)
-    target = update.callback_query.message if update.callback_query else update.message
-    if update.callback_query:
-        await update.callback_query.answer()
-
-    await target.reply_photo(
-        photo=InputFile(qr_img, filename="cascade_qr.png"),
-        caption=msg,
-        parse_mode="Markdown"
-    )
-
-
-@admin_required
 async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     def get_caddy_status() -> str:
         try:
@@ -654,8 +611,6 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await list_users_command(update, context)
         elif text == "🚀 Telegram Web Proxy":
             await proxy_command(update, context)
-        elif text == "🇷🇺 Каскадный шлюз":
-            await cascade_command(update, context)
         elif text == "📊 Статус сервера":
             await status_command(update, context)
         elif re.match(r"^[a-zA-Z0-9_-]+$", text) and not text.startswith("/"):
@@ -691,7 +646,6 @@ def main():
     app.add_handler(CommandHandler("del", del_user_command))
     app.add_handler(CommandHandler("proxy", proxy_command))
     app.add_handler(CommandHandler("webproxy", proxy_command))
-    app.add_handler(CommandHandler("cascade", cascade_command))
     app.add_handler(CommandHandler("status", status_command))
 
     app.add_handler(CallbackQueryHandler(callback_handler))
