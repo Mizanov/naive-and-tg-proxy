@@ -34,7 +34,7 @@ case "$ACTION" in
     caddy-validate)
         TARGET="${2:-}"
         validate_canonical_path "$TARGET"
-        exec /usr/local/bin/caddy validate --config "$TARGET"
+        exec /usr/local/bin/caddy validate --adapter caddyfile --config "$TARGET"
         ;;
     caddy-reload)
         if command -v systemctl >/dev/null 2>&1; then

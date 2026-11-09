@@ -156,6 +156,7 @@ def atomic_modify_caddyfile(
                 encoding="utf-8",
                 dir=temp_dir,
                 prefix="caddy_cand_",
+                suffix=".Caddyfile",
                 delete=False
             ) as tmp:
                 tmp.write(modified_content)
@@ -167,6 +168,15 @@ def atomic_modify_caddyfile(
             except Exception as val_err:
                 stderr_msg = getattr(val_err, "stderr", str(val_err))
                 raise CaddyValidationError(f"Caddyfile syntax validation failed: {stderr_msg}") from val_err
+
+            # Ensure readable permissions for caddy system user
+            try:
+                os.chmod(tmp_path, 0o644)
+                if os.path.exists(caddyfile_path):
+                    st = os.stat(caddyfile_path)
+                    os.chown(tmp_path, st.st_uid, st.st_gid)
+            except Exception as perm_err:
+                logger.warning("Could not preserve file permissions: %s", perm_err)
 
             # Backup
             try:
