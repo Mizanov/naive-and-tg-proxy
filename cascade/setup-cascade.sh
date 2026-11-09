@@ -146,7 +146,8 @@ cat <<EOF > /etc/sing-box/config.json
       {
         "type": "https",
         "tag": "dns-remote",
-        "server": "https://1.1.1.1/dns-query",
+        "server": "1.1.1.1",
+        "server_port": 443,
         "detour": "naive-europe"
       }
     ],
@@ -177,7 +178,9 @@ cat <<EOF > /etc/sing-box/config.json
         ],
         "server": "dns-local"
       }
-    ]
+    ],
+    "final": "dns-remote",
+    "strategy": "prefer_ipv4"
   },
   "inbounds": [
     {
@@ -270,6 +273,14 @@ cat <<EOF > /etc/sing-box/config.json
         "action": "sniff"
       },
       {
+        "protocol": "dns",
+        "action": "hijack-dns"
+      },
+      {
+        "port": 53,
+        "action": "hijack-dns"
+      },
+      {
         "rule_set": ["category-ads-all"],
         "outbound": "block"
       },
@@ -297,6 +308,15 @@ cat <<EOF > /etc/sing-box/config.json
           "wildberries.ru",
           "kinopoisk.ru"
         ],
+        "outbound": "direct"
+      },
+      {
+        "network": "udp",
+        "port": 443,
+        "outbound": "block"
+      },
+      {
+        "network": "udp",
         "outbound": "direct"
       }
     ],
