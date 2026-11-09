@@ -144,9 +144,10 @@ docker rm tgweb-proxy >/dev/null 2>&1 || true
 docker run -d \
     --name tgweb-proxy \
     --restart unless-stopped \
-    -p "127.0.0.1:8080:80" \
+    -p "127.0.0.1:8080:8080" \
     -e "TPROXY_HOSTNAME=$TG_DOMAIN" \
     -e "TPROXY_SECRET=$TG_PROXY_SECRET" \
+    -e "TLS_MODE=off" \
     --security-opt no-new-privileges:true \
     --memory 128m \
     --cpus 0.5 \
