@@ -37,7 +37,7 @@ from auth import (
 )
 
 SAMPLE_CADDYFILE = """
-vpn.example.com {
+node.example.com {
     tls internal
 
     route {

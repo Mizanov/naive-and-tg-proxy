@@ -37,7 +37,7 @@
 # ------------------------------------------------------------------------------
 # 2. Main Stealth & NaiveProxy Domain (Chromium-grade HTTP/2 Forward Proxy)
 # ------------------------------------------------------------------------------
-{{VPN_DOMAIN}} {
+{{NODE_DOMAIN}} {
     bind 0.0.0.0
     tls {{ACME_EMAIL}} {
         protocols tls1.2 tls1.3

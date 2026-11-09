@@ -48,21 +48,21 @@ if [ -f "$ENV_FILE" ]; then
     source "$ENV_FILE"
 fi
 
-VPN_DOMAIN="${VPN_DOMAIN:-}"
+NODE_DOMAIN="${NODE_DOMAIN:-${VPN_DOMAIN:-}}"
 TG_DOMAIN="${TG_DOMAIN:-}"
 ACME_EMAIL="${ACME_EMAIL:-}"
 TELEGRAM_BOT_TOKEN="${TELEGRAM_BOT_TOKEN:-}"
 TELEGRAM_ADMIN_IDS="${TELEGRAM_ADMIN_IDS:-}"
 CASCADE_DOMAIN="${CASCADE_DOMAIN:-}"
 
-if [ -z "$VPN_DOMAIN" ]; then
+if [ -z "$NODE_DOMAIN" ]; then
     echo -e "${BOLD}Настройка доменных имён и безопасности:${NC}"
-    prompt_var VPN_DOMAIN "Основной домен для NaiveProxy и сайта (например: edge.mydomain.com)"
-    prompt_var TG_DOMAIN "Поддомен для Telegram Web Proxy (например: tg.mydomain.com)" "tg.${VPN_DOMAIN#edge.}"
-    prompt_var ACME_EMAIL "Email для SSL-сертификатов Let's Encrypt" "admin@${VPN_DOMAIN#edge.}"
+    prompt_var NODE_DOMAIN "Основной домен для NaiveProxy и сайта (например: edge.mydomain.com)"
+    prompt_var TG_DOMAIN "Поддомен для Telegram Web Proxy (например: tg.mydomain.com)" "tg.${NODE_DOMAIN#edge.}"
+    prompt_var ACME_EMAIL "Email для SSL-сертификатов Let's Encrypt" "admin@${NODE_DOMAIN#edge.}"
     prompt_var TELEGRAM_BOT_TOKEN "Токен Telegram-бота (от @BotFather)"
     prompt_var TELEGRAM_ADMIN_IDS "Ваш цифровой Telegram ID (от @userinfobot)"
-    prompt_var CASCADE_DOMAIN "Домен или IP российского каскадного сервера (опционально, Enter для пропуска)" ""
+    prompt_var CASCADE_DOMAIN "Домен или IP каскадного сервера (опционально, Enter для пропуска)" ""
 fi
 
 # 2. Disable IPv6 & install system packages
@@ -112,7 +112,8 @@ INITIAL_PASS=$(openssl rand -hex 10)
 
 echo -e "${INFO} Генерация конфигурации /etc/caddy/Caddyfile..."
 sed -e "s|{{ACME_EMAIL}}|$ACME_EMAIL|g" \
-    -e "s|{{VPN_DOMAIN}}|$VPN_DOMAIN|g" \
+    -e "s|{{NODE_DOMAIN}}|$NODE_DOMAIN|g" \
+    -e "s|{{VPN_DOMAIN}}|$NODE_DOMAIN|g" \
     -e "s|{{TG_DOMAIN}}|$TG_DOMAIN|g" \
     -e "s|{{DEFAULT_USER}}|$INITIAL_USER|g" \
     -e "s|{{DEFAULT_PASS}}|$INITIAL_PASS|g" \
@@ -180,7 +181,8 @@ python3 -m venv /opt/proxy-bot/venv
 cat <<EOF > /opt/proxy-bot/.env
 TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
 TELEGRAM_ADMIN_IDS=${TELEGRAM_ADMIN_IDS}
-VPN_DOMAIN=${VPN_DOMAIN}
+NODE_DOMAIN=${NODE_DOMAIN}
+VPN_DOMAIN=${NODE_DOMAIN}
 TG_DOMAIN=${TG_DOMAIN}
 TG_PROXY_SECRET=${TG_PROXY_SECRET}
 CASCADE_DOMAIN=${CASCADE_DOMAIN}
@@ -201,7 +203,8 @@ systemctl restart caddy-bot
 
 # Save local .env for updates
 cat <<EOF > "$ENV_FILE"
-VPN_DOMAIN=${VPN_DOMAIN}
+NODE_DOMAIN=${NODE_DOMAIN}
+VPN_DOMAIN=${NODE_DOMAIN}
 TG_DOMAIN=${TG_DOMAIN}
 ACME_EMAIL=${ACME_EMAIL}
 TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
@@ -210,7 +213,7 @@ CASCADE_DOMAIN=${CASCADE_DOMAIN}
 EOF
 chmod 600 "$ENV_FILE"
 
-NAIVE_LINK="https://${INITIAL_USER}:${INITIAL_PASS}@${VPN_DOMAIN}:443#🛡️ [Naive] Stealth Proxy"
+NAIVE_LINK="https://${INITIAL_USER}:${INITIAL_PASS}@${NODE_DOMAIN}:443#🛡️ [Naive] Stealth Proxy"
 TG_PROXY_LINK="https://t.me/webproxy?server=${TG_DOMAIN}&port=443&secret=${TG_PROXY_SECRET}"
 
 echo ""
@@ -218,7 +221,7 @@ echo -e "${BOLD}═════════════════════�
 echo -e "  🎉 ${OK} Развёртывание успешно завершено!"
 echo -e "${BOLD}═════════════════════════════════════════════════════════════════════${NC}"
 echo ""
-echo -e "🌐 ${BOLD}Сайт-маскировка & NaiveProxy:${NC} https://${VPN_DOMAIN}"
+echo -e "🌐 ${BOLD}Сайт-маскировка & NaiveProxy:${NC} https://${NODE_DOMAIN}"
 echo -e "✈️ ${BOLD}Telegram Web Proxy:${NC}           https://${TG_DOMAIN}"
 echo ""
 echo -e "🔗 ${BOLD}Ссылка для Shadowrocket (NaiveProxy):${NC}"

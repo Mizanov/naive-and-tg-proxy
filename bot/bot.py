@@ -55,7 +55,8 @@ logger = logging.getLogger("ProxyBot")
 
 # Environment variables
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
-VPN_DOMAIN = os.getenv("VPN_DOMAIN", "vpn.example.com").strip()
+NODE_DOMAIN = os.getenv("NODE_DOMAIN", os.getenv("VPN_DOMAIN", "node.example.com")).strip()
+VPN_DOMAIN = NODE_DOMAIN
 TG_DOMAIN = os.getenv("TG_DOMAIN", "tg.example.com").strip()
 TG_PROXY_SECRET = os.getenv("TG_PROXY_SECRET", "").strip()
 CASCADE_DOMAIN = os.getenv("CASCADE_DOMAIN", "").strip()
