@@ -312,9 +312,37 @@ class TestAuth(unittest.IsolatedAsyncioTestCase):
         mock_update.effective_message.reply_text.assert_awaited_once()
 
 
-class TestBotFormatting(unittest.TestCase):
-    def test_escape_md(self):
-        # Import escape_md from bot
+class TestCaddyPermissionsAndBackup(unittest.TestCase):
+    def test_chmod_0644_before_validate_and_atomic_backup_overwrites_readonly(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            caddyfile = os.path.join(tmpdir, "Caddyfile")
+            backup = f"{caddyfile}.bak"
+            lock_path = os.path.join(tmpdir, "lock")
+            with open(caddyfile, "w") as f:
+                f.write(SAMPLE_CADDYFILE)
+            # Pre-existing read-only backup (simulates stale root-owned .bak in group-writable dir)
+            with open(backup, "w") as f:
+                f.write("stale backup")
+            os.chmod(backup, 0o444)
+
+            observed_modes = []
+            def runner(action, target=None):
+                if action == "caddy-validate" and target:
+                    observed_modes.append(os.stat(target).st_mode & 0o777)
+                return MagicMock(returncode=0, stdout="active", stderr="")
+
+            def mutator(content):
+                return content + "\n# mutated\n", True
+
+            atomic_modify_caddyfile(mutator, caddyfile_path=caddyfile, control_runner=runner, lock_path=lock_path)
+            self.assertEqual(observed_modes, [0o644])
+            with open(backup, "r") as f:
+                self.assertIn("alice", f.read())
+
+
+class TestBotFormatting(unittest.IsolatedAsyncioTestCase):
+    @classmethod
+    def setUpClass(cls):
         if "qrcode" not in sys.modules:
             sys.modules["qrcode"] = MagicMock()
         if "telegram" not in sys.modules:
@@ -324,13 +352,18 @@ class TestBotFormatting(unittest.TestCase):
                     self.text = text
                     self.url = url
                     self.callback_data = callback_data
+            class MockMarkup:
+                def __init__(self, inline_keyboard):
+                    self.inline_keyboard = inline_keyboard
             tg_mock.InlineKeyboardButton = MockBtn
-            tg_mock.InlineKeyboardMarkup = MagicMock()
+            tg_mock.InlineKeyboardMarkup = MockMarkup
             tg_mock.ReplyKeyboardMarkup = MagicMock()
+            tg_mock.InputFile = MagicMock()
             sys.modules["telegram"] = tg_mock
         if "telegram.ext" not in sys.modules:
             sys.modules["telegram.ext"] = MagicMock()
 
+    def test_escape_md(self):
         from bot import escape_md
         self.assertEqual(escape_md("Olesya_Media"), r"Olesya\_Media")
         self.assertEqual(escape_md("user_test_name"), r"user\_test\_name")
@@ -339,6 +372,54 @@ class TestBotFormatting(unittest.TestCase):
         self.assertEqual(escape_md("[test]"), r"\[test]")
         self.assertEqual(escape_md(""), "")
         self.assertEqual(escape_md(None), "")
+
+    async def test_list_users_and_info_card(self):
+        import bot
+        update = MagicMock()
+        update.message = AsyncMock()
+        update.effective_user.id = 12345
+        context = MagicMock()
+
+        with patch.dict(os.environ, {"TELEGRAM_ADMIN_IDS": "12345"}), \
+             patch.object(bot, "list_users", return_value={"tg_olesya_media": "secret123"}), \
+             patch.object(bot, "get_all_users_meta", return_value={
+                 "tg_olesya_media": {"tg_username": "Olesya_Media", "tg_first_name": "Olesya", "tg_id": 2103}
+             }):
+            await bot.list_users_command(update, context)
+
+            kwargs = update.message.reply_text.call_args.kwargs
+            args = update.message.reply_text.call_args.args
+            msg = args[0] if args else kwargs.get("text", "")
+            markup = kwargs["reply_markup"]
+            self.assertIn(r"@Olesya\_Media", msg)
+            callbacks = [b.callback_data for row in markup.inline_keyboard for b in row]
+            self.assertEqual(callbacks, ["info_tg_olesya_media", "del_tg_olesya_media"])
+
+            # Test info_ callback
+            cb_update = MagicMock()
+            cb_update.callback_query = AsyncMock()
+            cb_update.callback_query.data = "info_tg_olesya_media"
+            cb_update.callback_query.message = AsyncMock()
+            cb_update.effective_user.id = 12345
+            await bot.callback_handler(cb_update, context)
+
+            info_args = cb_update.callback_query.message.reply_text.call_args.args
+            info_kwargs = cb_update.callback_query.message.reply_text.call_args.kwargs
+            info_msg = info_args[0] if info_args else info_kwargs.get("text", "")
+            self.assertIn("secret123", info_msg)
+            self.assertIn("config.json", info_msg)
+            self.assertIn(r"@Olesya\_Media", info_msg)
+
+    async def test_long_caption_sends_photo_and_full_text_without_truncation(self):
+        import io
+        import bot
+        target = AsyncMock()
+        long_caption = "Header\n" + ("a" * 1100)
+        await bot.send_safe_photo_or_text(target, io.BytesIO(b"png"), "qr.png", long_caption)
+        target.reply_photo.assert_awaited_once()
+        target.reply_text.assert_awaited_once()
+        sent_text = target.reply_text.call_args.args[0]
+        self.assertEqual(sent_text, long_caption)
 
 
 if __name__ == "__main__":

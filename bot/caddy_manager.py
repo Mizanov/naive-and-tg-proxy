@@ -162,6 +162,12 @@ def atomic_modify_caddyfile(
                 tmp.write(modified_content)
                 tmp_path = tmp.name
 
+            # Ensure readable permissions before validation & reload
+            try:
+                os.chmod(tmp_path, 0o644)
+            except Exception as chmod_err:
+                logger.warning("Could not set permissions on temp Caddyfile: %s", chmod_err)
+
             # Pre-flight syntax validation
             try:
                 control_runner("caddy-validate", tmp_path)
@@ -169,18 +175,19 @@ def atomic_modify_caddyfile(
                 stderr_msg = getattr(val_err, "stderr", str(val_err))
                 raise CaddyValidationError(f"Caddyfile syntax validation failed: {stderr_msg}") from val_err
 
-            # Ensure readable permissions for caddy system user
-            try:
-                os.chmod(tmp_path, 0o644)
-                if os.path.exists(caddyfile_path):
+            if os.geteuid() == 0 and os.path.exists(caddyfile_path):
+                try:
                     st = os.stat(caddyfile_path)
                     os.chown(tmp_path, st.st_uid, st.st_gid)
-            except Exception as perm_err:
-                logger.warning("Could not preserve file permissions: %s", perm_err)
+                except Exception as perm_err:
+                    logger.warning("Could not preserve file ownership: %s", perm_err)
 
-            # Backup
+            # Atomic backup (avoids in-place permission issues on root-owned .bak)
             try:
-                shutil.copy2(caddyfile_path, backup_path)
+                tmp_bak = f"{backup_path}.tmp_{os.getpid()}"
+                shutil.copyfile(caddyfile_path, tmp_bak)
+                os.chmod(tmp_bak, 0o644)
+                os.replace(tmp_bak, backup_path)
             except Exception as e:
                 logger.warning("Could not create Caddyfile backup: %s", e)
 
@@ -189,7 +196,8 @@ def atomic_modify_caddyfile(
                 os.replace(tmp_path, caddyfile_path)
             except OSError:
                 atomic_tmp = f"{caddyfile_path}.atomic_{os.getpid()}"
-                shutil.copy2(tmp_path, atomic_tmp)
+                shutil.copyfile(tmp_path, atomic_tmp)
+                os.chmod(atomic_tmp, 0o644)
                 os.replace(atomic_tmp, caddyfile_path)
 
             # Reload and verify
@@ -199,7 +207,8 @@ def atomic_modify_caddyfile(
             except Exception as reload_err:
                 logger.critical("FATAL: Caddy reload failed, initiating rollback: %s", reload_err)
                 if os.path.exists(backup_path):
-                    shutil.copy2(backup_path, caddyfile_path)
+                    shutil.copyfile(backup_path, caddyfile_path)
+                    os.chmod(caddyfile_path, 0o644)
                     try:
                         control_runner("caddy-reload")
                     except Exception:

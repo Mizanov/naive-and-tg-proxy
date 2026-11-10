@@ -8,7 +8,7 @@ import json
 import logging
 import subprocess
 from datetime import datetime, timezone
-from typing import Optional, Set, Dict, Any
+from typing import Optional, Set, Dict, Any, Tuple
 
 import qrcode
 from telegram import (
@@ -71,6 +71,84 @@ def escape_md(text: str) -> str:
     for ch in ("_", "*", "`", "["):
         text = text.replace(ch, f"\\{ch}")
     return text
+
+
+def build_naive_config_payload(username: str, pwd: str) -> Tuple[str, str]:
+    """Builds NaiveProxy share URI and desktop config.json JSON string."""
+    naive_link = f"https://{username}:{pwd}@{NODE_DOMAIN}:443#🛡️ [Naive] Proxy"
+    client_config = {
+        "listen": "socks://127.0.0.1:1080",
+        "proxy": f"https://{username}:{pwd}@{NODE_DOMAIN}"
+    }
+    return naive_link, json.dumps(client_config, indent=2)
+
+
+async def send_safe_reply_text(
+    target,
+    text: str,
+    reply_markup=None,
+    disable_web_page_preview: bool = False
+):
+    """Sends Markdown text with automatic plain-text fallback on Telegram parser errors."""
+    try:
+        await target.reply_text(
+            text,
+            parse_mode="Markdown",
+            reply_markup=reply_markup,
+            disable_web_page_preview=disable_web_page_preview
+        )
+    except Exception as e:
+        logger.warning("Markdown send_safe_reply_text failed (%s), falling back to plain text.", e)
+        await target.reply_text(
+            text.replace("**", "").replace("`", "").replace("*", ""),
+            reply_markup=reply_markup,
+            disable_web_page_preview=disable_web_page_preview
+        )
+
+
+async def send_safe_photo_or_text(
+    target,
+    photo_io: io.BytesIO,
+    filename: str,
+    caption: str,
+    reply_markup=None
+):
+    """Sends QR photo with safe caption limits and fallback to text message."""
+    if len(caption) <= 1024:
+        try:
+            await target.reply_photo(
+                photo=InputFile(photo_io, filename=filename),
+                caption=caption,
+                parse_mode="Markdown",
+                reply_markup=reply_markup
+            )
+            return
+        except Exception as photo_err:
+            logger.warning("Markdown photo caption failed (%s), trying plain caption.", photo_err)
+            try:
+                photo_io.seek(0)
+                await target.reply_photo(
+                    photo=InputFile(photo_io, filename=filename),
+                    caption=caption.replace("**", "").replace("`", "").replace("*", "")[:1024],
+                    reply_markup=reply_markup
+                )
+                return
+            except Exception as plain_err:
+                logger.warning("Failed to send QR photo (%s), falling back to text.", plain_err)
+    else:
+        try:
+            await target.reply_photo(
+                photo=InputFile(photo_io, filename=filename)
+            )
+        except Exception as photo_err:
+            logger.warning("Failed to send standalone QR photo (%s).", photo_err)
+
+    await send_safe_reply_text(
+        target,
+        caption,
+        reply_markup=reply_markup,
+        disable_web_page_preview=True
+    )
 
 
 def get_admin_ids() -> Set[int]:
@@ -313,14 +391,8 @@ async def request_access_handler(update: Update, context: ContextTypes.DEFAULT_T
 
 
 async def deliver_credentials(message_target, username: str, pwd: str, is_self_service: bool = False):
-    naive_link = f"https://{username}:{pwd}@{NODE_DOMAIN}:443#🛡️ [Naive] Proxy"
+    naive_link, client_json_str = build_naive_config_payload(username, pwd)
     tg_link = get_tg_proxy_link()
-
-    client_config = {
-        "listen": "socks://127.0.0.1:1080",
-        "proxy": f"https://{username}:{pwd}@{NODE_DOMAIN}"
-    }
-    client_json_str = json.dumps(client_config, indent=2)
 
     caption = (
         f"🎉 **Ваш персональный доступ успешно активирован!**\n\n"
@@ -349,42 +421,20 @@ async def deliver_credentials(message_target, username: str, pwd: str, is_self_s
         ]
         reply_kb = get_admin_keyboard()
 
-    try:
-        await message_target.reply_photo(
-            photo=InputFile(qr_img, filename=f"{username}_naive_qr.png"),
-            caption=caption[:1024],
-            parse_mode="Markdown",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
-    except Exception as photo_err:
-        logger.warning(f"Failed to send QR photo: {photo_err}, falling back to text message")
-        try:
-            await message_target.reply_text(
-                caption,
-                parse_mode="Markdown",
-                reply_markup=InlineKeyboardMarkup(keyboard),
-                disable_web_page_preview=True
-            )
-        except Exception:
-            await message_target.reply_text(
-                caption.replace("**", "").replace("`", ""),
-                reply_markup=InlineKeyboardMarkup(keyboard),
-                disable_web_page_preview=True
-            )
+    await send_safe_photo_or_text(
+        message_target,
+        qr_img,
+        f"{username}_naive_qr.png",
+        caption,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
 
-    try:
-        await message_target.reply_text(
-            f"⚡ **Прямая ссылка NaiveProxy для копирования:**\n`{naive_link}`",
-            parse_mode="Markdown",
-            reply_markup=reply_kb,
-            disable_web_page_preview=True
-        )
-    except Exception:
-        await message_target.reply_text(
-            f"⚡ Прямая ссылка NaiveProxy для копирования:\n{naive_link}",
-            reply_markup=reply_kb,
-            disable_web_page_preview=True
-        )
+    await send_safe_reply_text(
+        message_target,
+        f"⚡ **Прямая ссылка NaiveProxy для копирования:**\n`{naive_link}`",
+        reply_markup=reply_kb,
+        disable_web_page_preview=True
+    )
 
 
 async def show_my_naive(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -402,15 +452,13 @@ async def show_my_naive(update: Update, context: ContextTypes.DEFAULT_TYPE):
     users = list_users(caddyfile_path=CADDYFILE)
     pwd = users.get(username)
     if not pwd:
-        await target.reply_text(f"⚠️ Учётная запись `{username}` не найдена в Caddyfile. Обратитесь к администратору.")
+        await send_safe_reply_text(
+            target,
+            f"⚠️ Учётная запись `{username}` не найдена в Caddyfile. Обратитесь к администратору."
+        )
         return
 
-    naive_link = f"https://{username}:{pwd}@{NODE_DOMAIN}:443#🛡️ [Naive] Proxy"
-    client_config = {
-        "listen": "socks://127.0.0.1:1080",
-        "proxy": f"https://{username}:{pwd}@{NODE_DOMAIN}"
-    }
-    client_json_str = json.dumps(client_config, indent=2)
+    naive_link, client_json_str = build_naive_config_payload(username, pwd)
 
     msg = (
         f"📱 **Параметры NaiveProxy**\n\n"
@@ -429,15 +477,13 @@ async def show_my_naive(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.callback_query:
         await update.callback_query.answer()
 
-    try:
-        await target.reply_photo(
-            photo=InputFile(qr_img, filename=f"{username}_qr.png"),
-            caption=msg[:1024],
-            parse_mode="Markdown",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
-    except Exception:
-        await target.reply_text(msg, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
+    await send_safe_photo_or_text(
+        target,
+        qr_img,
+        f"{username}_qr.png",
+        msg,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
 
 
 async def show_my_tgproxy(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -461,17 +507,18 @@ async def show_my_tgproxy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.callback_query:
         await update.callback_query.answer()
 
-    await target.reply_photo(
-        photo=InputFile(qr_img, filename="tg_webproxy_qr.png"),
-        caption=msg,
-        parse_mode="Markdown",
+    await send_safe_photo_or_text(
+        target,
+        qr_img,
+        "tg_webproxy_qr.png",
+        msg,
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
 
 async def show_user_guide(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = (
-        "📖 **Инструкция по подключению к скрытому хабу**\n\n"
+        "📖 **Инструкция по подключению к сетевому хабу**\n\n"
         "1️⃣ **Telegram Web Proxy (самый простой способ):**\n"
         "• Нажмите кнопку «✈️ Telegram Proxy» и кликните «🚀 Подключить в Telegram».\n"
         "• Telegram подключится напрямую через зашифрованный HTTPS-канал.\n\n"
@@ -484,7 +531,7 @@ async def show_user_guide(update: Update, context: ContextTypes.DEFAULT_TYPE):
     target = update.callback_query.message if update.callback_query else update.message
     if update.callback_query:
         await update.callback_query.answer()
-    await target.reply_text(msg, parse_mode="Markdown")
+    await send_safe_reply_text(target, msg, disable_web_page_preview=True)
 
 
 @admin_required
@@ -541,15 +588,13 @@ async def list_users_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 tg_info = f" ({', '.join(parts)})"
 
         msg += f"• `{u}`{tg_info}\n"
-        keyboard.append([InlineKeyboardButton(f"🗑 Удалить {u}", callback_data=f"del_{u}")])
+        keyboard.append([
+            InlineKeyboardButton(f"🔗 {u}", callback_data=f"info_{u}"),
+            InlineKeyboardButton("🗑 Удалить", callback_data=f"del_{u}")
+        ])
 
     reply_markup = InlineKeyboardMarkup(keyboard) if keyboard else None
-    try:
-        await update.message.reply_text(msg, parse_mode="Markdown", reply_markup=reply_markup)
-    except Exception as e:
-        logger.warning("Failed to send list_users_command with Markdown: %s. Falling back to plain text.", e)
-        clean_msg = msg.replace("**", "").replace("`", "")
-        await update.message.reply_text(clean_msg, reply_markup=reply_markup)
+    await send_safe_reply_text(update.message, msg, reply_markup=reply_markup)
 
 
 @admin_required
@@ -605,10 +650,7 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"🧠 **Оперативная память:**\n```{mem_r.stdout.strip()}```"
     )
     reply_kb = get_admin_keyboard()
-    try:
-        await update.message.reply_text(msg, parse_mode="Markdown", reply_markup=reply_kb)
-    except Exception:
-        await update.message.reply_text(msg.replace("**", "").replace("`", ""), reply_markup=reply_kb)
+    await send_safe_reply_text(update.message, msg, reply_markup=reply_kb)
 
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -647,11 +689,55 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.answer("⛔ Доступ запрещён.", show_alert=True)
         return
 
-    if data.startswith("del_"):
+    if data.startswith("info_"):
+        username = data[5:]
+        users = list_users(caddyfile_path=CADDYFILE)
+        pwd = users.get(username)
+        if not pwd:
+            await send_safe_reply_text(query.message, f"⚠️ Пользователь `{username}` не найден.")
+            return
+
+        meta_registry = get_all_users_meta()
+        meta = meta_registry.get(username, {})
+        tg_details = ""
+        if meta and isinstance(meta, dict):
+            tg_id = meta.get("tg_id", "—")
+            tg_user = f"@{escape_md(str(meta['tg_username']))}" if meta.get("tg_username") else "—"
+            raw_name = meta.get("tg_first_name", "")
+            if meta.get("tg_last_name"):
+                raw_name += f" {meta.get('tg_last_name')}"
+            tg_name = escape_md(raw_name) if raw_name else "—"
+            issued = meta.get("issued_at", "—")
+            tg_details = (
+                f"📱 **Telegram:** {tg_user}\n"
+                f"👤 **Имя:** {tg_name}\n"
+                f"🆔 **Telegram ID:** `{tg_id}`\n"
+                f"📅 **Выдан:** `{issued}`\n\n"
+            )
+
+        naive_link, client_json_str = build_naive_config_payload(username, pwd)
+        msg = (
+            f"👤 **Пользователь:** `{username}`\n"
+            f"{tg_details}"
+            f"🔑 **Пароль:** `{pwd}`\n\n"
+            f"🔗 **Ссылка NaiveProxy:**\n`{naive_link}`\n\n"
+            f"💻 **Конфиг для ПК (config.json):**\n"
+            f"```json\n{client_json_str}\n```"
+        )
+        keyboard = [
+            [InlineKeyboardButton("🗑 Удалить ключ", callback_data=f"del_{username}")]
+        ]
+        await send_safe_reply_text(
+            query.message,
+            msg,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            disable_web_page_preview=True
+        )
+    elif data.startswith("del_"):
         username = data[4:]
         try:
             delete_naive_user(username, caddyfile_path=CADDYFILE)
-            await query.message.reply_text(f"✅ Пользователь `{username}` успешно удален.", parse_mode="Markdown")
+            await send_safe_reply_text(query.message, f"✅ Пользователь `{username}` успешно удален.")
         except Exception as e:
             await query.message.reply_text(f"❌ Ошибка удаления: {e}")
 

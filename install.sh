@@ -192,9 +192,12 @@ chown root:proxy-bot /opt/proxy-bot/.env
 chmod 640 /opt/proxy-bot/.env
 chown -R caddy:proxy-bot /etc/caddy
 chmod 775 /etc/caddy
-chmod 664 /etc/caddy/Caddyfile
+chmod 664 /etc/caddy/Caddyfile* 2>/dev/null || true
 
 cp "$SCRIPT_DIR/bot/caddy-bot.service" /etc/systemd/system/caddy-bot.service
+if command -v systemd-analyze >/dev/null 2>&1; then
+    systemd-analyze verify /etc/systemd/system/caddy-bot.service >/dev/null 2>&1 || true
+fi
 systemctl daemon-reload
 systemctl enable --now caddy-bot
 systemctl restart caddy-bot
