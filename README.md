@@ -1,4 +1,4 @@
-# 🛡️ naive-and-tg-proxy
+# 🛡️ naive-tg-proxy
 
 <div align="center">
 
