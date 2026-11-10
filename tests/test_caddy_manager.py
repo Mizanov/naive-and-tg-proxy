@@ -409,6 +409,8 @@ class TestBotFormatting(unittest.IsolatedAsyncioTestCase):
             self.assertIn("secret123", info_msg)
             self.assertIn("config.json", info_msg)
             self.assertIn(r"@Olesya\_Media", info_msg)
+            self.assertIn("#[Naive] Proxy", info_msg)
+            self.assertNotIn("#🛡️", info_msg)
 
     async def test_long_caption_sends_photo_and_full_text_without_truncation(self):
         import io

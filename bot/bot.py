@@ -75,7 +75,7 @@ def escape_md(text: str) -> str:
 
 def build_naive_config_payload(username: str, pwd: str) -> Tuple[str, str]:
     """Builds NaiveProxy share URI and desktop config.json JSON string."""
-    naive_link = f"https://{username}:{pwd}@{NODE_DOMAIN}:443#🛡️ [Naive] Proxy"
+    naive_link = f"https://{username}:{pwd}@{NODE_DOMAIN}:443#[Naive] Proxy"
     client_config = {
         "listen": "socks://127.0.0.1:1080",
         "proxy": f"https://{username}:{pwd}@{NODE_DOMAIN}"

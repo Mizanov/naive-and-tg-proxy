@@ -212,7 +212,7 @@ TELEGRAM_ADMIN_IDS=${TELEGRAM_ADMIN_IDS}
 EOF
 chmod 600 "$ENV_FILE"
 
-NAIVE_LINK="https://${INITIAL_USER}:${INITIAL_PASS}@${NODE_DOMAIN}:443#🛡️ [Naive] Proxy"
+NAIVE_LINK="https://${INITIAL_USER}:${INITIAL_PASS}@${NODE_DOMAIN}:443#[Naive] Proxy"
 TG_PROXY_LINK="https://t.me/webproxy?server=${TG_DOMAIN}&port=443&secret=${TG_PROXY_SECRET}"
 
 echo ""
