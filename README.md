@@ -104,8 +104,8 @@
 Подключитесь к серверу по SSH и выполните:
 
 ```bash
-git clone https://github.com/Mizanov/naive-and-tg-proxy.git /opt/naive-and-tg-proxy
-cd /opt/naive-and-tg-proxy
+git clone https://github.com/Mizanov/naive-tg-proxy.git /opt/naive-tg-proxy
+cd /opt/naive-tg-proxy
 sudo bash install.sh
 ```
 
@@ -200,7 +200,7 @@ sudo bash install.sh
 Для проверки и обновления всех компонентов выполните:
 
 ```bash
-cd /opt/naive-and-tg-proxy
+cd /opt/naive-tg-proxy
 sudo bash update.sh
 ```
 
